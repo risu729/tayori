@@ -1,4 +1,4 @@
-import { defineConfig } from "cf/config";
+import { bindings, defineConfig, exports } from "cf/config";
 import * as entrypoint from "./src/index.ts" with { type: "cf-worker" };
 import { compatibilityDate } from "./worker-runtime.ts";
 
@@ -7,8 +7,16 @@ export default defineConfig({
     name: "tayori",
     entrypoint,
     compatibilityDate,
-    // Set explicitly: without routes or domains, cf enables workers.dev at deploy
-    // (getSubdomainValues). Only the Custom Domains in docs/design.md may serve.
+    domains: ["tayori.takuk.me", "tayori-mcp.takuk.me"],
+    exports: {
+      Relay: exports.durableObject({ storage: "sqlite" }),
+    },
+    env: {
+      RELAY: bindings.durableObject({ worker: "tayori", exportName: "Relay" }),
+    },
+    // Equal to cf's default while domains are set (getSubdomainValues enables
+    // workers.dev only without routes or domains). Kept explicit so that removing
+    // the domains can never expose workers.dev; only the Custom Domains may serve.
     workersDev: false,
     // Set explicitly: for an unset value cf sends no preview setting at deploy
     // (getSubdomainValues) and leaves it to the API.

@@ -5,7 +5,9 @@ delivery; the relay verifies it, deduplicates it and forwards it to the target
 that is active for that source's route. The name comes from _tayori_ (便り, a
 letter or news).
 
-Status: accepted design. Nothing beyond the scaffold is implemented.
+Status: the request path, the Relay Durable Object and both MCP tools are
+implemented with synthetic tests. Deployment, the Custom Domains, Access and the
+Portal registration are not done yet; see [the roadmap](roadmap.md).
 
 ## Decisions
 
@@ -56,6 +58,12 @@ Deployed configuration, changed only through a reviewed PR:
 
 - `SOURCE_FUMI_SECRET` is the Standard Webhooks secret that fumi signs with.
 
+- `ACCESS_ISSUER`, `ACCESS_AUDIENCE` and `ALLOWED_PRINCIPALS` guard `/mcp`.
+  `ALLOWED_PRINCIPALS` is a JSON array such as `["user:<sub>"]`.
+
+- Every secret is optional at deploy. Until one is set, the part that needs it
+  answers 503 and nothing is forwarded.
+
 - Runtime state lives only in a Durable Object, for example:
 
   ```jsonc
@@ -85,8 +93,8 @@ Deployed configuration, changed only through a reviewed PR:
    - It takes the route's active target. If there is none, it answers
      `unavailable`.
    - It marks the delivery `sending`, with that target.
-   - It POSTs the body bytes unchanged, with the target's authentication, a 3 s
-     timeout and `redirect: "manual"`.
+   - It POSTs the body bytes unchanged, with the target's authentication, the
+     same `webhook-id` header, a 3 s timeout and `redirect: "manual"`.
 4. **Record the outcome.** What matters is whether the request reached the
    target:
    - 2xx: `forwarded`.
@@ -96,8 +104,10 @@ Deployed configuration, changed only through a reviewed PR:
      configuration error. A 401 can also mean a disabled trigger.
    - A timeout after the request was sent: `unknown`. The next attempt resends,
      which may cause a duplicate run that the receiver absorbs.
-5. **Answer the source.** Return 200 when the delivery is `forwarded`, even if
-   saving the record failed. Otherwise return 503.
+5. **Answer the source.** Return 200 when the delivery is `forwarded`.
+   Otherwise, including when the Relay itself fails, return 503. If saving a
+   `forwarded` record fails, the source may see an error and resend; the receiver
+   absorbs the duplicate.
 
 The time budget is 3 s plus about 0.3 s, under fumi's 5 s webhook timeout.
 
@@ -114,7 +124,10 @@ Deduplication rows are kept for 7 days.
   inactive accounts never call it.
 - **What the relay accepts.** It refuses a `leaseUnix` older than the stored one,
   so two accounts cannot flip the route back and forth, and a target that the
-  route does not list.
+  route does not list. At an equal `leaseUnix` it refuses a different target. It
+  also refuses a `leaseUnix` more than 5 minutes in the future, since the lease
+  time is when the lease was recorded and a future one would block the real
+  holder until then.
 - **Staleness.** Nothing switches automatically. Every forward logs the age of
   `setAt`, and a daily agent check compares the relay's active target with the
   owner's own record of the active account. The agent may read git; the relay
