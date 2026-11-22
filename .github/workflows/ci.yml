@@ -10,7 +10,8 @@ defaults:
     shell: bash
 # A newer PR push cancels the older run. Main runs never cancel a running one,
 # because it may be deploying. They run one at a time in push order; GitHub keeps
-# only the latest queued run, so the newest main commit is always deployed last.
+# only the latest queued run, so the newest main commit is deployed last when its
+# checks pass. A run whose commit is no longer the main head deploys nothing.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

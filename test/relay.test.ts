@@ -38,6 +38,8 @@ describe("routing", () => {
       "https://tayori.takuk.me:8443/in/fumi",
       "https://tayori.takuk.me/in/unknown",
       "https://tayori.example.workers.dev/in/fumi",
+      "http://tayori.takuk.me/in/fumi",
+      "https://tayori-mcp.takuk.me/mcp",
     ]) {
       const response = await worker.fetch(new Request(url, { method: "POST" }));
       expect(response.status, url).toBe(404);
