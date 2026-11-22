@@ -16,7 +16,7 @@ describe("parseTarget", () => {
       "{not json",
       "[]",
       JSON.stringify({ url: "http://a.example.invalid/", key: "k" }),
-      JSON.stringify({ url: "https://user:pw@a.example.invalid/", key: "k" }),
+      JSON.stringify({ url: "https://user:pw@files.example.com/", key: "k" }),
       JSON.stringify({ url: "https://a.example.invalid/", key: "has space" }),
       JSON.stringify({ url: "https://a.example.invalid/", key: "" }),
       JSON.stringify({ url: "https://a.example.invalid/" }),
