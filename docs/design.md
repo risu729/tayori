@@ -5,7 +5,9 @@ delivery; the relay verifies it, deduplicates it and forwards it to the target
 that is active for that source's route. The name comes from _tayori_ (便り, a
 letter or news).
 
-Status: accepted design. Nothing beyond the scaffold is implemented.
+Status: the request path, the Relay Durable Object and both MCP tools are
+implemented with synthetic tests. Deployment, the Custom Domains, Access and the
+Portal registration are not done yet; see [the roadmap](roadmap.md).
 
 ## Decisions
 
@@ -56,6 +58,12 @@ Deployed configuration, changed only through a reviewed PR:
 
 - `SOURCE_FUMI_SECRET` is the Standard Webhooks secret that fumi signs with.
 
+- `ACCESS_ISSUER`, `ACCESS_AUDIENCE` and `ALLOWED_PRINCIPALS` guard `/mcp`.
+  `ALLOWED_PRINCIPALS` is a JSON array such as `["user:<sub>"]`.
+
+- Every secret is optional at deploy. Until one is set, the part that needs it
+  answers 503 and nothing is forwarded.
+
 - Runtime state lives only in a Durable Object, for example:
 
   ```jsonc
@@ -85,8 +93,8 @@ Deployed configuration, changed only through a reviewed PR:
    - It takes the route's active target. If there is none, it answers
      `unavailable`.
    - It marks the delivery `sending`, with that target.
-   - It POSTs the body bytes unchanged, with the target's authentication, a 3 s
-     timeout and `redirect: "manual"`.
+   - It POSTs the body bytes unchanged, with the target's authentication, the
+     same `webhook-id` header, a 3 s timeout and `redirect: "manual"`.
 4. **Record the outcome.** What matters is whether the request reached the
    target:
    - 2xx: `forwarded`.
