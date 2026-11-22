@@ -1,5 +1,5 @@
 import { HttpError, authenticate } from "./access.ts";
-import { INGRESS_HOST, MCP_HOST } from "./config.ts";
+import { HOST } from "./config.ts";
 import { handleIngress } from "./ingress.ts";
 import { handleMcp } from "./mcp.ts";
 
@@ -15,16 +15,11 @@ function secured(response: Response): Response {
 
 async function route(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const url = new URL(request.url);
-  if (url.protocol === "https:" && url.hostname === INGRESS_HOST && !url.port) {
-    const match = /^\/in\/([a-z0-9-]{1,64})$/.exec(url.pathname);
-    if (match) return handleIngress(request, env, ctx, match[1]!);
-  }
-  if (
-    url.protocol === "https:" &&
-    url.hostname === MCP_HOST &&
-    !url.port &&
-    url.pathname === "/mcp"
-  ) {
+  if (url.protocol !== "https:" || url.hostname !== HOST || url.port)
+    throw new HttpError(404, "not_found");
+  const ingress = /^\/in\/([a-z0-9-]{1,64})$/.exec(url.pathname);
+  if (ingress) return handleIngress(request, env, ctx, ingress[1]!);
+  if (url.pathname === "/mcp") {
     if (!["POST", "GET", "DELETE"].includes(request.method))
       throw new HttpError(405, "method_not_allowed");
     const origin = request.headers.get("origin");

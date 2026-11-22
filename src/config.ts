@@ -1,8 +1,8 @@
 /** Deployed relay configuration. Changing it takes a reviewed PR; the active
  * target of a route is runtime state in the Relay Durable Object instead. */
 
-export const INGRESS_HOST = "tayori.takuk.me";
-export const MCP_HOST = "tayori-mcp.takuk.me";
+/** Access covers the host; only `/in/*` bypasses it (docs/design.md). */
+export const HOST = "tayori.takuk.me";
 
 export const LIMITS = {
   maxBodyBytes: 64 * 1024,

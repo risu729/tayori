@@ -6,7 +6,7 @@ that is active for that source's route. The name comes from _tayori_ (便り, a
 letter or news).
 
 Status: the request path, the Relay Durable Object and both MCP tools are
-implemented with synthetic tests. Deployment, the Custom Domains, Access and the
+implemented with synthetic tests. Deployment, the Custom Domain, Access and the
 Portal registration are not done yet; see [the roadmap](roadmap.md).
 
 ## Decisions
@@ -138,13 +138,15 @@ Deduplication rows are kept for 7 days.
 
 ## MCP endpoint
 
-One Worker serves two Custom Domains:
+The Worker serves one Custom Domain, `tayori.takuk.me` (owner, 2026-11-22
+15:09 UTC: one host with a path bypass, as for Suguri's WebSub callback, instead
+of a separate MCP host):
 
-- **`tayori.takuk.me`** serves only `/in/*`. It is public and checked by
-  signature. No Access app may cover it, including a wildcard one.
-- **`tayori-mcp.takuk.me`** serves only `/mcp`. An Access app covers the whole
-  hostname. The Worker also checks the Access JWT itself, as fumi does: issuer,
-  audience, `type: "app"`, RS256 and the principal allowlist.
+- An Access app covers the whole host, so **`/mcp`** is owner-only. The Worker
+  also checks the Access JWT itself, as fumi does: issuer, audience,
+  `type: "app"`, RS256 and the principal allowlist.
+- A more specific Access app bypasses **`/in/*`**, which is checked by signature
+  instead. No other Access app may cover it.
 
 Every other host or path returns 404. `workers.dev` and preview URLs are off.
 

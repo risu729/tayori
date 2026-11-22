@@ -20,7 +20,7 @@ async function keys() {
   return { verify: createLocalJWKSet({ keys: [jwk] }), sign };
 }
 const withToken = (token: string) =>
-  new Request("https://tayori-mcp.takuk.me/mcp", {
+  new Request("https://tayori.takuk.me/mcp", {
     method: "POST",
     headers: { "cf-access-jwt-assertion": token },
   });
@@ -49,7 +49,7 @@ describe("Access authentication", () => {
       ),
     ).rejects.toMatchObject({ status: 401 });
     await expect(
-      authenticate(new Request("https://tayori-mcp.takuk.me/mcp"), env, verify),
+      authenticate(new Request("https://tayori.takuk.me/mcp"), env, verify),
     ).rejects.toMatchObject({ status: 401 });
     await expect(
       authenticate(withToken("x"), { ...env, ALLOWED_PRINCIPALS: "[]" }, verify),
@@ -59,17 +59,15 @@ describe("Access authentication", () => {
   it("guards /mcp on the MCP host", async () => {
     const worker = exports.default;
     expect(
-      (await worker.fetch(new Request("https://tayori-mcp.takuk.me/mcp", { method: "POST" })))
-        .status,
+      (await worker.fetch(new Request("https://tayori.takuk.me/mcp", { method: "POST" }))).status,
     ).toBe(401);
-    const crossOrigin = new Request("https://tayori-mcp.takuk.me/mcp", {
+    const crossOrigin = new Request("https://tayori.takuk.me/mcp", {
       method: "POST",
       headers: { origin: "https://evil.example.invalid" },
     });
     expect((await worker.fetch(crossOrigin)).status).toBe(403);
     expect(
-      (await worker.fetch(new Request("https://tayori-mcp.takuk.me/mcp", { method: "PUT" })))
-        .status,
+      (await worker.fetch(new Request("https://tayori.takuk.me/mcp", { method: "PUT" }))).status,
     ).toBe(405);
   });
 });
@@ -77,12 +75,9 @@ describe("Access authentication", () => {
 describe("MCP tools", () => {
   it("sets the active target and lists routes through the official client", async () => {
     const client = new Client({ name: "synthetic-agent", version: "1" });
-    const transport = new StreamableHTTPClientTransport(
-      new URL("https://tayori-mcp.takuk.me/mcp"),
-      {
-        fetch: async (url, init) => handleMcp(new Request(url, init), env, "user:synthetic-owner"),
-      },
-    );
+    const transport = new StreamableHTTPClientTransport(new URL("https://tayori.takuk.me/mcp"), {
+      fetch: async (url, init) => handleMcp(new Request(url, init), env, "user:synthetic-owner"),
+    });
     await client.connect(transport);
     try {
       const tools = await client.listTools();

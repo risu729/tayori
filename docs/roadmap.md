@@ -13,9 +13,9 @@ linked evidence.
       ([#2](https://github.com/risu729/tayori/pull/2)).
 - [ ] Issue a deploy token through [risu729/infra](https://github.com/risu729/infra) and
       add the deploy job.
-- [ ] Attach both Custom Domains and check that no Access app covers
-      `tayori.takuk.me`.
-- [ ] Register `tayori-mcp.takuk.me` in the owner Portal (two infra PRs and a
+- [ ] Attach the Custom Domain and check that Access covers `/mcp` but not
+      `/in/*`.
+- [ ] Register `tayori.takuk.me/mcp` in the owner Portal (two infra PRs and a
       one-time dashboard authentication).
 - [ ] The owner sets `TARGET_GROK_A` and `TARGET_GROK_B`; the bots' rules add
       the `set_active` call.
