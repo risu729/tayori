@@ -8,8 +8,9 @@ linked evidence.
 - [x] Create the repository with the owner's standard settings and tooling
       ([#1](https://github.com/risu729/tayori/pull/1)).
 - [ ] Add the default-branch ruleset matching the sibling repositories.
-- [ ] Implement the request path, the Durable Object and the MCP tools in
-      [the design](design.md), with tests.
+- [x] Implement the request path, the Durable Object and the MCP tools in
+      [the design](design.md), with tests
+      ([#2](https://github.com/risu729/tayori/pull/2)).
 - [ ] Issue a deploy token through [risu729/infra](https://github.com/risu729/infra) and
       add the deploy job.
 - [ ] Attach both Custom Domains and check that no Access app covers
