@@ -16,9 +16,4 @@ mise.local.lock
 .env.*
 .dev.vars
 .dev.vars.*
-*.eml
-*.mbox
-*.har
 *.log
-data/
-work/

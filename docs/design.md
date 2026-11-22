@@ -20,7 +20,7 @@ Status: accepted design. Nothing beyond the scaffold is implemented.
 - Registering targets through MCP is dropped. A Grok bot can create its own
   routine with a webhook trigger but cannot read the trigger's URL or key, so a
   person copies them from the routine panel (gate result, 2026-11-22 14:22 UTC).
-- The repository name is `tayori` (owner, 2026-11-22).
+- The repository name is `tayori` (owner, 2026-11-22 14:25 UTC).
 
 ## Words used here
 
@@ -45,6 +45,9 @@ Deployed configuration, changed only through a reviewed PR:
   "routes": { "fumi": { "mode": "one", "targets": ["grok-a", "grok-b"] } }
 }
 ```
+
+- Each Grok account runs its bot as a Cursor automation, so a Grok target is
+  that automation's webhook trigger.
 
 - `TARGET_GROK_A` and `TARGET_GROK_B` are Worker secrets holding
   `{"url":"https://api2.cursor.sh/automations/webhook/<id>","key":"crsr_…"}`.
@@ -84,14 +87,15 @@ Deployed configuration, changed only through a reviewed PR:
    - It marks the delivery `sending`, with that target.
    - It POSTs the body bytes unchanged, with the target's authentication, a 3 s
      timeout and `redirect: "manual"`.
-4. **Record the outcome:**
+4. **Record the outcome.** What matters is whether the request reached the
+   target:
    - 2xx: `forwarded`.
-   - 429, 503, 3xx, or a network error before any response: clear the record, so
-     the next attempt resends.
-   - 400, 401 or 413: clear the record and log a configuration error. A 401 can
-     also mean a disabled trigger.
-   - A timeout after sending: `unknown`. The next attempt resends, which may cause
-     a duplicate run that the receiver absorbs.
+   - 429, 3xx or any 5xx, or a network error before the request was sent: clear
+     the record, so the next attempt resends.
+   - Any other 4xx, such as 400, 401, 403, 404 or 413: clear the record and log a
+     configuration error. A 401 can also mean a disabled trigger.
+   - A timeout after the request was sent: `unknown`. The next attempt resends,
+     which may cause a duplicate run that the receiver absorbs.
 5. **Answer the source.** Return 200 when the delivery is `forwarded`, even if
    saving the record failed. Otherwise return 503.
 

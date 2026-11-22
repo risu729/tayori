@@ -1,5 +1,5 @@
 name: CodeQL
-# CI calls this on every main run before deploying, so main pushes need no own trigger.
+# CI calls this on every main run, so main pushes need no own trigger.
 on:
   pull_request:
   schedule:

@@ -42,7 +42,7 @@ jobs:
           production-strategy: versions
   security:
     name: Security
-    # The CodeQL analysis of main, which the deploy job will wait for.
+    # The CodeQL analysis of main. The deploy job, once added, will need it.
     if: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
     permissions:
       contents: read
