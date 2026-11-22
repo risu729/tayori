@@ -1,0 +1,15 @@
+{
+  "extends": "@risu729/tsconfigs/bundler",
+  "compilerOptions": {
+    // The shared preset enables incremental builds.
+    "incremental": false,
+    "types": ["@cloudflare/vitest-plugin/types"]
+  },
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "*.config.ts",
+    "worker-runtime.ts",
+    ".cloudflare/types"
+  ]
+}

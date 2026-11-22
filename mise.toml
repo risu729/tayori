@@ -1,0 +1,81 @@
+#:schema https://mise.jdx.dev/schema/mise.json
+
+min_version = "2026.11.3"
+
+[tools]
+bun = "1.4.5"
+node = "26.13.1"
+hk = "2.13.0"
+"npm:oxlint" = "1.94.0"
+oxfmt = "0.75.0"
+jactionlint = "v2.6.0"
+shellcheck = "0.11.0"
+ghalint = "1.6.0"
+pinact = "5.0.2"
+zizmor = "1.32.0"
+tombi = "1.11.3"
+rumdl = "v0.3.5"
+yamlfmt = "0.21.0"
+uv = "0.13.9"
+yamllint = "1.38.0"
+typos = "1.52.2"
+pkl = "0.33.1"
+betterleaks = "v1.10.1"
+
+[settings]
+# Required by [deps].
+experimental = true
+lockfile = true
+lockfile_platforms = ["linux-x64", "windows-x64"]
+
+[settings.npm]
+package_manager = "bun"
+
+[env]
+_.path = ["{{config_root}}/node_modules/.bin"]
+
+# mise run and mise exec install the locked dependencies first when an input changed.
+# bunfig.toml joins the default sources (bun.lock, package.json): its isolated linker
+# decides the node_modules layout.
+[deps.bun]
+auto = true
+sources = ["package.json", "bun.lock", "bunfig.toml"]
+run = "bun install --frozen-lockfile"
+
+[tasks.typecheck]
+description = "Check TypeScript without emitting files."
+depends = ["types"]
+run = "tsc"
+
+[tasks.types]
+description = "Generate binding and runtime types from native Cloudflare configuration."
+run = "cf workers types"
+
+[tasks.build]
+description = "Build the Worker using the pinned Cloudflare toolchain."
+run = "cf build --mode production"
+
+[tasks.test]
+description = "Run the tests inside the local Workers runtime."
+run = "vitest run"
+
+[tasks."check:output"]
+description = "Validate production Build Output without contacting deployed resources."
+depends = ["build"]
+run = "cf workers versions create --prebuilt --mode production --worker tayori --dry-run"
+
+[tasks.check]
+description = "Run all linters, security checks, and type checking."
+run = "hk check --all --no-progress --no-fail-fast"
+
+[tasks.ci]
+description = "Run the same checks as GitHub Actions."
+depends = ["check", "test", "check:output"]
+
+[tasks.fix]
+description = "Apply formatter and linter fixes."
+run = "hk fix --all --no-progress --no-fail-fast"
+
+[tasks."hooks:install"]
+description = "Install the local pre-commit hook."
+run = "hk install --mise"
