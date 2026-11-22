@@ -93,7 +93,12 @@ export function createRelayMcpServer(env: Env, principal: string, request: Reque
         openWorldHint: false,
       },
     },
-    async () => toolResult({ routes: await relay.getRoutes() }),
+    async () => {
+      console.log(
+        JSON.stringify({ event: "get_routes", principal, userAgent: userAgent(request) }),
+      );
+      return toolResult({ routes: await relay.getRoutes() });
+    },
   );
   return server;
 }

@@ -225,8 +225,10 @@ export class Relay extends DurableObject<Env> {
     if (!route || route.mode !== "one") return { ok: false, reason: "unknown_route" };
     if (!route.targets.includes(target)) return { ok: false, reason: "unknown_target" };
     const now = Date.now();
-    // A lease time is a unix time in seconds, no later than a day from now.
-    if (!Number.isSafeInteger(leaseUnix) || leaseUnix <= 0 || leaseUnix > now / 1000 + 86_400)
+    // A lease time is when the caller's lease was recorded: a past unix time in
+    // seconds, allowing 5 minutes of clock skew. A future lease would block the
+    // real holder's calls as stale until that time.
+    if (!Number.isSafeInteger(leaseUnix) || leaseUnix <= 0 || leaseUnix > now / 1000 + 300)
       return { ok: false, reason: "invalid_lease" };
     const current = this.route(source);
     if (

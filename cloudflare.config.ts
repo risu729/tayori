@@ -14,8 +14,9 @@ export default defineConfig({
     env: {
       RELAY: bindings.durableObject({ worker: "tayori", exportName: "Relay" }),
     },
-    // Set explicitly: without routes or domains, cf enables workers.dev at deploy
-    // (getSubdomainValues). Only the Custom Domains in docs/design.md may serve.
+    // Equal to cf's default while domains are set (getSubdomainValues enables
+    // workers.dev only without routes or domains). Kept explicit so that removing
+    // the domains can never expose workers.dev; only the Custom Domains may serve.
     workersDev: false,
     // Set explicitly: for an unset value cf sends no preview setting at deploy
     // (getSubdomainValues) and leaves it to the API.

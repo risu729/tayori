@@ -62,8 +62,13 @@ export async function handleIngress(
   if (!checkBody(config, body)) throw new HttpError(400, "invalid_body");
   // Run the forward under waitUntil, so a source that disconnects cannot cut
   // the Relay off between sending and recording the outcome.
-  const delivery = relayStub(env).deliver(source, webhookId, body);
-  ctx.waitUntil(delivery.catch(() => undefined));
+  const delivery = relayStub(env)
+    .deliver(source, webhookId, body)
+    .catch(() => {
+      console.log(JSON.stringify({ event: "ingress", source, outcome: "relay_error" }));
+      return "retry" as const;
+    });
+  ctx.waitUntil(delivery);
   const outcome = await delivery;
   return outcome === "forwarded"
     ? Response.json({ status: "forwarded" })

@@ -104,8 +104,10 @@ Deployed configuration, changed only through a reviewed PR:
      configuration error. A 401 can also mean a disabled trigger.
    - A timeout after the request was sent: `unknown`. The next attempt resends,
      which may cause a duplicate run that the receiver absorbs.
-5. **Answer the source.** Return 200 when the delivery is `forwarded`, even if
-   saving the record failed. Otherwise return 503.
+5. **Answer the source.** Return 200 when the delivery is `forwarded`.
+   Otherwise, including when the Relay itself fails, return 503. If saving a
+   `forwarded` record fails, the source may see an error and resend; the receiver
+   absorbs the duplicate.
 
 The time budget is 3 s plus about 0.3 s, under fumi's 5 s webhook timeout.
 
@@ -122,7 +124,10 @@ Deduplication rows are kept for 7 days.
   inactive accounts never call it.
 - **What the relay accepts.** It refuses a `leaseUnix` older than the stored one,
   so two accounts cannot flip the route back and forth, and a target that the
-  route does not list.
+  route does not list. At an equal `leaseUnix` it refuses a different target. It
+  also refuses a `leaseUnix` more than 5 minutes in the future, since the lease
+  time is when the lease was recorded and a future one would block the real
+  holder until then.
 - **Staleness.** Nothing switches automatically. Every forward logs the age of
   `setAt`, and a daily agent check compares the relay's active target with the
   owner's own record of the active account. The agent may read git; the relay

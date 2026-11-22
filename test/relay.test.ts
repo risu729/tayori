@@ -1,6 +1,8 @@
 // oxlint-disable no-await-in-loop -- Each request depends on the Relay state the previous one left.
 import { env, exports } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createExecutionContext, runInDurableObject } from "cloudflare:test";
+import { handleIngress } from "../src/ingress.ts";
 import { classifyResponse, relayStub } from "../src/relay.ts";
 import { nextLease, notification, signedRequest } from "./helpers.ts";
 
@@ -247,5 +249,105 @@ describe("set_active", () => {
     const text = JSON.stringify(routes);
     expect(text).not.toContain("synthetic-key");
     expect(text).not.toContain("/automations/");
+  });
+});
+
+describe("review cases", () => {
+  it("refuses a lease more than 5 minutes in the future", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    expect(await relay().setActive("fumi", "grok-a", now + 301)).toEqual({
+      ok: false,
+      reason: "invalid_lease",
+    });
+  });
+
+  it("logs a timeout as unknown", async () => {
+    await activate("grok-a");
+    const log = vi.spyOn(console, "log");
+    mockTarget(
+      (request) =>
+        new Promise<Response>((_, reject) => {
+          request.signal.addEventListener("abort", () => reject(request.signal.reason));
+        }),
+    );
+    expect(
+      (await worker.fetch(await signedRequest(notification(), { id: "op_timeout-log" }))).status,
+    ).toBe(503);
+    const entry = log.mock.calls
+      .map(([line]) => JSON.parse(String(line)) as Record<string, unknown>)
+      .find((line) => line["event"] === "forward" && line["outcome"] !== undefined);
+    expect(entry).toMatchObject({ outcome: "unknown", reason: "timeout" });
+  });
+
+  it("answers 503 without a second send while the same delivery is in flight", async () => {
+    await activate("grok-a");
+    let released = false;
+    // The response is created inside the Relay's own I/O context once released.
+    const { calls } = mockTarget(async () => {
+      await vi.waitUntil(() => released, { timeout: 2000, interval: 10 });
+      return new Response(null, { status: 200 });
+    });
+    const id = "op_in-flight";
+    const first = worker.fetch(await signedRequest(notification(), { id }));
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    expect((await worker.fetch(await signedRequest(notification(), { id }))).status).toBe(503);
+    expect(calls).toHaveLength(1);
+    released = true;
+    expect((await first).status).toBe(200);
+  });
+
+  it("refuses a streamed body over 64 KiB without a Content-Length", async () => {
+    const chunk = new Uint8Array(16 * 1024).fill(97);
+    let sent = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent >= 5) controller.close();
+        else {
+          sent += 1;
+          controller.enqueue(chunk);
+        }
+      },
+    });
+    const signed = await signedRequest(notification());
+    const request = new Request(signed.url, {
+      method: "POST",
+      headers: signed.headers,
+      body: stream,
+      duplex: "half",
+    } as RequestInit);
+    expect(request.headers.get("content-length")).toBeNull();
+    expect((await worker.fetch(request)).status).toBe(413);
+  });
+
+  it("refuses a timestamp more than 300 s in the future", async () => {
+    const future = await signedRequest(notification(), {
+      timestamp: Math.floor(Date.now() / 1000) + 301,
+    });
+    expect((await worker.fetch(future)).status).toBe(401);
+  });
+
+  it("answers 503 when the source secret is missing", async () => {
+    const ctx = createExecutionContext();
+    const request = await signedRequest(notification());
+    await expect(
+      handleIngress(request, { ...env, SOURCE_FUMI_SECRET: "not-a-secret" }, ctx, "fumi"),
+    ).rejects.toMatchObject({ status: 503 });
+  });
+
+  it("prunes delivery records older than 7 days", async () => {
+    await activate("grok-a");
+    await runInDurableObject(relay(), async (_instance, state) => {
+      state.storage.sql.exec(
+        `INSERT INTO deliveries(source, webhook_id, state, target, lock_until, updated_at)
+         VALUES ('fumi', 'op_old', 'forwarded', 'grok-a', 0, ?)`,
+        Date.now() - 8 * 24 * 60 * 60 * 1000,
+      );
+    });
+    const { calls } = mockTarget(() => new Response(null, { status: 200 }));
+    expect((await worker.fetch(await signedRequest(notification(), { id: "op_old" }))).status).toBe(
+      200,
+    );
+    // The old record was pruned, so the delivery was sent again.
+    expect(calls).toHaveLength(1);
   });
 });
