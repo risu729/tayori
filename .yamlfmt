@@ -1,0 +1,5 @@
+# yamlfmt defaults to CRLF on Windows, which this repository supports.
+line_ending: lf
+formatter:
+  eof_newline: true
+  trim_trailing_whitespace: true

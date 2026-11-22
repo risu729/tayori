@@ -1,0 +1,7 @@
+[global]
+exclude = ["node_modules", ".cloudflare"]
+
+[MD013]
+line_length = 88
+code_blocks = false
+reflow = true
