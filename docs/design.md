@@ -160,6 +160,19 @@ only choose another target that the route already lists; that shows in the log
 and in the daily check. Each call is logged with `X-Forwarded-User-Agent`, for
 audit only.
 
+## Deployment
+
+Every main commit whose checks pass deploys through the shared deploy action
+with the versions strategy and `deploy-triggers: true`, so CI also owns the
+Custom Domain, as risu729/infra's application domain delivery expects. The
+`production` Environment's `CLOUDFLARE_API_TOKEN` has Individual Workers Editor
+on `tayori` and Workers Routes Write on `takuk.me`; its metadata lives in infra.
+
+The Worker was created once through the Cloudflare API as a placeholder that
+returns 404, with the `Relay` SQLite class migration, so the token could be
+scoped to it (owner approval, 2026-11-22 15:16 UTC). The domain was not
+attached by hand.
+
 ## Later, when a real need exists
 
 - `mode: "all"`, deduplicating on (`source`, `webhook-id`, `target`).

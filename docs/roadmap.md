@@ -7,14 +7,16 @@ linked evidence.
 
 - [x] Create the repository with the owner's standard settings and tooling
       ([#1](https://github.com/risu729/tayori/pull/1)).
-- [ ] Add the default-branch ruleset matching the sibling repositories.
+- [x] Add the default-branch ruleset matching the sibling repositories
+      (`branches`, created 2026-11-22, identical to fumi's).
 - [x] Implement the request path, the Durable Object and the MCP tools in
       [the design](design.md), with tests
       ([#2](https://github.com/risu729/tayori/pull/2)).
-- [ ] Issue a deploy token through [risu729/infra](https://github.com/risu729/infra) and
-      add the deploy job.
-- [ ] Attach the Custom Domain and check that Access covers `/mcp` but not
-      `/in/*`.
+- [ ] Issue a deploy token through [risu729/infra](https://github.com/risu729/infra)
+      (Individual Workers Editor on `tayori`, Workers Routes Write on `takuk.me`,
+      as for Pateat) and add the deploy job.
+- [ ] Attach the Custom Domain through the first deploy (`deploy-triggers: true`)
+      and check that Access covers `/mcp` but not `/in/*`.
 - [ ] Register `tayori.takuk.me/mcp` in the owner Portal (two infra PRs and a
       one-time dashboard authentication).
 - [ ] The owner sets `TARGET_GROK_A` and `TARGET_GROK_B`; the bots' rules add

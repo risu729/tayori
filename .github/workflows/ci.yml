@@ -99,7 +99,10 @@ jobs:
           worker: tayori
           build-mode: production
           production-strategy: versions
-          deploy-triggers: "false"
+          # The app repository owns its Custom Domain (risu729/infra
+          # docs/application-domain-delivery.md): every deploy reconciles
+          # cloudflare.config.ts triggers, including workers.dev and preview URLs.
+          deploy-triggers: "true"
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       - name: Record the deployed commit
