@@ -6,8 +6,9 @@ that is active for that source's route. The name comes from _tayori_ (便り, a
 letter or news).
 
 Status: the request path, the Relay Durable Object and both MCP tools are
-implemented with synthetic tests. Deployment, the Custom Domain, Access and the
-Portal registration are not done yet; see [the roadmap](roadmap.md).
+implemented with synthetic tests and deployed on `tayori.takuk.me` behind Access
+(2026-11-23). The Portal registration and the targets are not done yet; see
+[the roadmap](roadmap.md).
 
 ## Decisions
 
@@ -173,8 +174,11 @@ returns 404, with the `Relay` SQLite class migration, so the token could be
 scoped to it (owner approval, 2026-11-22 15:16 UTC). The domain was not
 attached by hand. The first Deploy Worker run (2026-11-23 02:33 UTC) stopped
 because `cf workers versions create` in CI refuses to replace a Worker last
-updated through the script API. The temporary `Bootstrap` workflow replaces it
-once with `cf deploy --force`; it is removed after the normal job succeeds.
+updated through the script API. A temporary `Bootstrap` workflow replaced it
+once with `cf deploy --force` (run 45101831603, 02:45 UTC), which also attached
+the Custom Domain; the normal job then deployed (run 45102502321) and the
+workflow was removed. Setting Worker secrets through the API keeps the
+`cf_cli` source, so later deploys are unaffected.
 
 ## Later, when a real need exists
 

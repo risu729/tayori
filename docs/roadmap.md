@@ -12,11 +12,13 @@ linked evidence.
 - [x] Implement the request path, the Durable Object and the MCP tools in
       [the design](design.md), with tests
       ([#2](https://github.com/risu729/tayori/pull/2)).
-- [ ] Issue a deploy token through [risu729/infra](https://github.com/risu729/infra)
-      (Individual Workers Editor on `tayori`, Workers Routes Write on `takuk.me`,
-      as for Pateat) and add the deploy job.
-- [ ] Attach the Custom Domain through the first deploy (`deploy-triggers: true`)
-      and check that Access covers `/mcp` but not `/in/*`.
+- [x] Issue a deploy token through [risu729/infra](https://github.com/risu729/infra)
+      ([infra#155](https://github.com/risu729/infra/pull/155)) and add the deploy job
+      ([#3](https://github.com/risu729/tayori/pull/3),
+      [#4](https://github.com/risu729/tayori/pull/4)).
+- [x] Attach the Custom Domain through the first deploy (2026-11-23, read back
+      through the API).
+- [ ] Check that Access covers `/mcp` but not `/in/*`.
 - [ ] Register `tayori.takuk.me/mcp` in the owner Portal (two infra PRs and a
       one-time dashboard authentication).
 - [ ] The owner sets `TARGET_GROK_A` and `TARGET_GROK_B`; the bots' rules add
