@@ -7,7 +7,7 @@ export default defineConfig({
     name: "tayori",
     entrypoint,
     compatibilityDate,
-    domains: ["tayori.takuk.me", "tayori-mcp.takuk.me"],
+    domains: ["tayori.takuk.me"],
     exports: {
       Relay: exports.durableObject({ storage: "sqlite" }),
     },
@@ -16,7 +16,7 @@ export default defineConfig({
     },
     // Equal to cf's default while domains are set (getSubdomainValues enables
     // workers.dev only without routes or domains). Kept explicit so that removing
-    // the domains can never expose workers.dev; only the Custom Domains may serve.
+    // the domains can never expose workers.dev; only the Custom Domain may serve.
     workersDev: false,
     // Set explicitly: for an unset value cf sends no preview setting at deploy
     // (getSubdomainValues) and leaves it to the API.

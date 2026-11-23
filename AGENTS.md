@@ -100,8 +100,8 @@ document never overrides a rule here.
 
 ## Operations and safety
 
-- Keep the scope of a task explicit. Once the deploy job exists, merging to
-  main deploys the Worker, so merging is a production change.
+- Keep the scope of a task explicit. Merging to main deploys the Worker, so
+  merging is a production change.
 - Keep tasks in mise rather than package.json scripts. Keep CI actions SHA-pinned.
 - Use the locked cf CLI and native cloudflare.config.ts configuration.
 - Use synthetic fixtures. Never commit target URLs, keys, signing secrets,

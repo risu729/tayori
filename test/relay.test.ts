@@ -29,13 +29,17 @@ afterEach(() => {
 });
 
 describe("routing", () => {
-  it("answers 404 off the two hosts and paths, and 405 for other methods", async () => {
+  it("answers 404 off the host and its two paths, and 405 for other methods", async () => {
     for (const url of [
       "https://tayori.takuk.me/",
-      "https://tayori.takuk.me/mcp",
-      "https://tayori-mcp.takuk.me/in/fumi",
+      "https://tayori.takuk.me/in/",
+      "https://tayori.takuk.me/mcp/extra",
+      "https://tayori.takuk.me/in/fumi/extra",
+      "https://tayori.takuk.me:8443/in/fumi",
       "https://tayori.takuk.me/in/unknown",
       "https://tayori.example.workers.dev/in/fumi",
+      "http://tayori.takuk.me/in/fumi",
+      "https://tayori-mcp.takuk.me/mcp",
     ]) {
       const response = await worker.fetch(new Request(url, { method: "POST" }));
       expect(response.status, url).toBe(404);

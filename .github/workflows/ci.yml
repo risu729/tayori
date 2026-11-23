@@ -8,7 +8,10 @@ permissions: {}
 defaults:
   run:
     shell: bash
-# A newer PR push cancels the older run. Main runs never cancel a running one.
+# A newer PR push cancels the older run. Main runs never cancel a running one,
+# because it may be deploying. They run one at a time in push order; GitHub keeps
+# only the latest queued run, so the newest main commit is deployed last when its
+# checks pass. A run whose commit is no longer the main head deploys nothing.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -42,15 +45,79 @@ jobs:
           production-strategy: versions
   security:
     name: Security
-    # The CodeQL analysis of main. The deploy job, once added, will need it.
+    # The CodeQL gate before a production deployment.
     if: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
     permissions:
       contents: read
       security-events: write # Allow the called CodeQL workflow to publish results.
     uses: $/.github/workflows/codeql.yml
+  deploy:
+    name: Deploy Worker
+    # Every main push or manual run whose checks pass deploys that commit.
+    needs: [checks, security]
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    environment: production
+    steps:
+      - name: Checkout the checked commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Install locked tools
+        uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
+        with:
+          version: 2026.11.10
+          install_args: --locked
+          cache: "false"
+      # Install the locked dependencies before any step that holds the token.
+      - name: Install locked dependencies
+        run: mise deps
+      # The deploy action uploads the Build Output; it does not build.
+      - name: Build and validate the production Worker
+        run: mise run check:output
+      - name: Release only the current main head
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          current_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+          if [[ "${current_sha}" == "${GITHUB_SHA}" ]]; then
+            echo "release=true" >> "${GITHUB_OUTPUT}"
+          else
+            # The newer main head's CI run is queued behind this one and deploys it.
+            echo "release=false" >> "${GITHUB_OUTPUT}"
+            echo "Main moved to ${current_sha}; ${GITHUB_SHA} is not deployed." >> "${GITHUB_STEP_SUMMARY}"
+          fi
+      - name: Deploy the checked Worker
+        if: ${{ steps.current.outputs.release == 'true' }}
+        uses: risu729/wrangler-deploy-action@52b0bb0f6c0969897cb84b47f4d5ebc3650f2d0c # v4.0.1
+        with:
+          mode: production
+          worker: tayori
+          build-mode: production
+          production-strategy: versions
+          # The app repository owns its Custom Domain (risu729/infra
+          # docs/application-domain-delivery.md): every deploy reconciles
+          # cloudflare.config.ts triggers, including workers.dev and preview URLs.
+          deploy-triggers: "true"
+          cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          cloudflare-account-id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Record the deployed commit
+        if: ${{ steps.current.outputs.release == 'true' }}
+        run: |-
+          {
+            printf '### Worker deployment\n\n'
+            printf 'Commit: %s\n\n' "${GITHUB_SHA}"
+            printf 'Run: %s/%s/actions/runs/%s\n\n' "${GITHUB_SERVER_URL}" "${GITHUB_REPOSITORY}" "${GITHUB_RUN_ID}"
+            printf 'The shared action verified the uploaded Worker version at 100%% traffic.\n'
+          } >> "${GITHUB_STEP_SUMMARY}"
   actions-timeline:
     name: Generate Actions Timeline
-    needs: [checks, security]
+    needs: [deploy]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5

@@ -6,7 +6,7 @@ that is active for that source's route. The name comes from _tayori_ (便り, a
 letter or news).
 
 Status: the request path, the Relay Durable Object and both MCP tools are
-implemented with synthetic tests. Deployment, the Custom Domains, Access and the
+implemented with synthetic tests. Deployment, the Custom Domain, Access and the
 Portal registration are not done yet; see [the roadmap](roadmap.md).
 
 ## Decisions
@@ -138,13 +138,15 @@ Deduplication rows are kept for 7 days.
 
 ## MCP endpoint
 
-One Worker serves two Custom Domains:
+The Worker serves one Custom Domain, `tayori.takuk.me` (owner, 2026-11-22
+15:09 UTC: one host with a path bypass, as for Suguri's WebSub callback, instead
+of a separate MCP host):
 
-- **`tayori.takuk.me`** serves only `/in/*`. It is public and checked by
-  signature. No Access app may cover it, including a wildcard one.
-- **`tayori-mcp.takuk.me`** serves only `/mcp`. An Access app covers the whole
-  hostname. The Worker also checks the Access JWT itself, as fumi does: issuer,
-  audience, `type: "app"`, RS256 and the principal allowlist.
+- An Access app covers the whole host, so **`/mcp`** is owner-only. The Worker
+  also checks the Access JWT itself, as fumi does: issuer, audience,
+  `type: "app"`, RS256 and the principal allowlist.
+- A more specific Access app bypasses **`/in/*`**, which is checked by signature
+  instead. No other Access app may cover it.
 
 Every other host or path returns 404. `workers.dev` and preview URLs are off.
 
@@ -157,6 +159,19 @@ All Portal clients share one owner principal. An injected `set_active` call can
 only choose another target that the route already lists; that shows in the log
 and in the daily check. Each call is logged with `X-Forwarded-User-Agent`, for
 audit only.
+
+## Deployment
+
+Every main commit whose checks pass deploys through the shared deploy action
+with the versions strategy and `deploy-triggers: true`, so CI also owns the
+Custom Domain, as risu729/infra's application domain delivery expects. The
+`production` Environment's `CLOUDFLARE_API_TOKEN` has Individual Workers Editor
+on `tayori` and Workers Routes Write on `takuk.me`; its metadata lives in infra.
+
+The Worker was created once through the Cloudflare API as a placeholder that
+returns 404, with the `Relay` SQLite class migration, so the token could be
+scoped to it (owner approval, 2026-11-22 15:16 UTC). The domain was not
+attached by hand.
 
 ## Later, when a real need exists
 
