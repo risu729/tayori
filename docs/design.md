@@ -171,7 +171,10 @@ on `tayori` and Workers Routes Write on `takuk.me`; its metadata lives in infra.
 The Worker was created once through the Cloudflare API as a placeholder that
 returns 404, with the `Relay` SQLite class migration, so the token could be
 scoped to it (owner approval, 2026-11-22 15:16 UTC). The domain was not
-attached by hand.
+attached by hand. The first Deploy Worker run (2026-11-23 02:33 UTC) stopped
+because `cf workers versions create` in CI refuses to replace a Worker last
+updated through the script API. The temporary `Bootstrap` workflow replaces it
+once with `cf deploy --force`; it is removed after the normal job succeeds.
 
 ## Later, when a real need exists
 
