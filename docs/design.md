@@ -193,14 +193,14 @@ matching `^[a-z0-9][a-z0-9-]{0,31}-[0-9]{8}-[0-9]{3,4}$`, such as
 Each fire is logged with the principal, user agent, source, handoff id and
 outcome, never headers, URL paths, keys or message text.
 
-What an injected Portal client can do with `fire`: wake one of the configured
-receivers up to its limit (about 0.73 % of Grok's weekly limit per `to-grok` wake,
-or about 22 % a day at the daily limit, so sustained misuse uses up the weekly
-limit that every Grok bot on the account shares in about four and a half days; up
-to 50 Claude Project sessions a day for `to-claude`), use up a limit so real wakes get `rate_limited`, or fire a predictable
-future handoff id first, so the real `fire` gets `already_forwarded` with an early
-`firstAt`. It cannot choose a URL, credential, body or unlisted route. In each case
-the wake is lost or delayed, not misdirected, and the receivers' scheduled checks
+What an injected Portal client can do with `fire`: wake one of the configured receivers
+up to its limit (about 0.73 % of Grok's weekly limit per `to-grok` wake, or about 22 % a
+day at the daily limit, so sustained misuse uses up the weekly limit that every Grok bot
+on the account shares in about four and a half days; up to 50 Claude Project sessions a
+day for `to-claude`), use up a limit so real wakes get `rate_limited`, or fire a
+predictable future handoff id first, so the real `fire` gets `already_forwarded` with an
+early `firstAt`. It cannot choose a URL, credential, body or unlisted route. In each
+case the wake is lost or delayed, not misdirected, and the receivers' scheduled checks
 still read the handoff.
 
 ## Choosing the active target
