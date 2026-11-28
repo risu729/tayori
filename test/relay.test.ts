@@ -3,6 +3,7 @@ import { env, exports } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createExecutionContext, runInDurableObject } from "cloudflare:test";
 import { handleIngress } from "../src/ingress.ts";
+import { ROUTES, SOURCES, TARGETS } from "../src/config.ts";
 import { classifyResponse, relayStub } from "../src/relay.ts";
 import { nextLease, notification, signedRequest } from "./helpers.ts";
 
@@ -37,6 +38,7 @@ describe("routing", () => {
       "https://tayori.takuk.me/in/fumi/extra",
       "https://tayori.takuk.me:8443/in/fumi",
       "https://tayori.takuk.me/in/unknown",
+      "https://tayori.takuk.me/in/to-claude",
       "https://tayori.example.workers.dev/in/fumi",
       "http://tayori.takuk.me/in/fumi",
       "https://tayori-mcp.takuk.me/mcp",
@@ -244,15 +246,20 @@ describe("set_active", () => {
   it("reports routes without URL paths or keys", async () => {
     await activate("grok-a");
     const routes = await relay().getRoutes();
-    expect(routes).toHaveLength(1);
+    expect(routes.map((route) => route.source)).toEqual(["fumi", "to-claude", "to-grok"]);
     expect(routes[0]).toMatchObject({ source: "fumi", mode: "one", active: "grok-a" });
     expect(routes[0]!.targets.map((t) => [t.name, t.configured, t.host])).toEqual([
       ["grok-a", true, "grok-a.example.invalid"],
       ["grok-b", true, "grok-b.example.invalid"],
     ]);
+    expect(routes[1]).toMatchObject({ active: "claude", setAt: null });
+    expect(routes[1]!.targets[0]).toMatchObject({ configured: true, host: "api.anthropic.com" });
+    expect(routes[1]!.fire).toMatchObject({ perHour: 6, perDay: 20 });
+    expect(routes[0]!.fire).toBeUndefined();
     const text = JSON.stringify(routes);
     expect(text).not.toContain("synthetic-key");
     expect(text).not.toContain("/automations/");
+    expect(text).not.toContain("/routines/");
   });
 });
 
@@ -353,5 +360,190 @@ describe("review cases", () => {
     );
     // The old record was pruned, so the delivery was sent again.
     expect(calls).toHaveLength(1);
+  });
+});
+
+describe("fire", () => {
+  const resetFires = () =>
+    runInDurableObject(relay(), async (_instance, state) => {
+      state.storage.sql.exec(`DELETE FROM fires`);
+    });
+  const hang = (request: Request) =>
+    new Promise<Response>((_, reject) => {
+      request.signal.addEventListener("abort", () => reject(request.signal.reason));
+    });
+
+  it("wakes the Claude routine with an empty body once per handoff id", async () => {
+    await resetFires();
+    const log = vi.spyOn(console, "log");
+    const { calls } = mockTarget(() => new Response('{"claude_code_session_id":"s"}'));
+    expect(await relay().fire("to-claude", "desk-20261128-001")).toEqual({
+      status: "forwarded",
+    });
+    expect(calls).toHaveLength(1);
+    const sent = calls[0]!.request;
+    expect(sent.url).toBe("https://api.anthropic.com/v1/claude_code/routines/trig_synthetic0/fire");
+    expect(sent.redirect).toBe("manual");
+    expect(sent.headers.get("authorization")).toBe("Bearer synthetic-key-claude");
+    expect(sent.headers.get("anthropic-version")).toBe("2023-06-01");
+    expect(sent.headers.get("anthropic-beta")).toBe("experimental-cc-routine-2026-04-01");
+    expect(sent.headers.get("webhook-id")).toBeNull();
+    expect(calls[0]!.body).toBe("{}");
+    expect(await relay().fire("to-claude", "desk-20261128-001")).toMatchObject({
+      status: "already_forwarded",
+      firstAt: expect.any(String),
+    });
+    expect(calls).toHaveLength(1);
+    const text = JSON.stringify(log.mock.calls);
+    expect(text).not.toContain("synthetic-key");
+    expect(text).not.toContain("/routines/");
+  });
+
+  it("sends Grok a Relay-built body to the active desk target only", async () => {
+    await resetFires();
+    const { calls } = mockTarget(() => new Response(null, { status: 200 }));
+    expect(await relay().fire("to-grok", "claude-20261128-001")).toEqual({
+      error: "unavailable",
+    });
+    expect(calls).toHaveLength(0);
+    expect((await relay().setActive("to-grok", "grok-b", nextLease())).ok).toBe(false);
+    expect((await relay().setActive("to-grok", "grok-b-desk", nextLease())).ok).toBe(true);
+    expect(await relay().fire("to-grok", "claude-20261128-001")).toEqual({
+      status: "forwarded",
+    });
+    const sent = calls[0]!.request;
+    expect(sent.url).toBe("https://grok-b.example.invalid/automations/webhook/synthetic-b-desk");
+    expect(sent.headers.get("authorization")).toBe("Bearer synthetic-key-b-desk");
+    expect(sent.headers.get("webhook-id")).toBe("mcp_claude-20261128-001");
+    expect(JSON.parse(calls[0]!.body)).toEqual({
+      source: "to-grok",
+      handoffId: "claude-20261128-001",
+    });
+  });
+
+  it("refuses webhook sources, unknown sources and ids that are not handoff ids", async () => {
+    const { calls } = mockTarget(() => new Response(null, { status: 200 }));
+    expect(await relay().fire("fumi", "desk-20261128-002")).toEqual({ error: "unknown_source" });
+    expect(await relay().fire("other", "desk-20261128-002")).toEqual({ error: "unknown_source" });
+    for (const id of ["", "desk", "desk-2026112-001", "https://x.invalid/", "Desk-20261128-001"])
+      expect(await relay().fire("to-claude", id), id).toEqual({ error: "invalid_arguments" });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("never resends after unknown, but resends after a cleared outcome", async () => {
+    await resetFires();
+    expect((await relay().setActive("to-grok", "grok-a-desk", nextLease())).ok).toBe(true);
+    const timeout = mockTarget(hang);
+    expect(await relay().fire("to-grok", "claude-20261128-002")).toEqual({ error: "unknown" });
+    expect(await relay().fire("to-grok", "claude-20261128-002")).toEqual({ error: "unknown" });
+    expect(timeout.calls).toHaveLength(1);
+    vi.restoreAllMocks();
+    await resetFires();
+    // With one of the two hourly slots taken, the retry passes only if the
+    // cleared send gave its slot back.
+    await runInDurableObject(relay(), async (_instance, state) => {
+      state.storage.sql.exec(
+        `INSERT INTO fires(source, webhook_id, at) VALUES ('to-grok', 'mcp_seed-cleared', ?)`,
+        Date.now(),
+      );
+    });
+    const responses = [new Response(null, { status: 500 }), new Response(null, { status: 200 })];
+    const cleared = mockTarget(() => responses.shift()!);
+    expect(await relay().fire("to-grok", "claude-20261128-003")).toEqual({
+      error: "unavailable",
+    });
+    expect(await relay().fire("to-grok", "claude-20261128-003")).toEqual({
+      status: "forwarded",
+    });
+    expect(cleared.calls).toHaveLength(2);
+  });
+
+  it("limits sends per hour, counting a send in flight, and reports it", async () => {
+    await resetFires();
+    expect((await relay().setActive("to-grok", "grok-a-desk", nextLease())).ok).toBe(true);
+    await runInDurableObject(relay(), async (_instance, state) => {
+      state.storage.sql.exec(
+        `INSERT INTO fires(source, webhook_id, at) VALUES ('to-grok', 'mcp_seed', ?)`,
+        Date.now(),
+      );
+    });
+    let released = false;
+    const { calls } = mockTarget(async () => {
+      await vi.waitUntil(() => released, { timeout: 2000, interval: 10 });
+      return new Response(null, { status: 200 });
+    });
+    // perHour is 2: the seeded row and this in-flight send use both slots.
+    const first = relay().fire("to-grok", "claude-20261128-004");
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    expect(await relay().fire("to-grok", "claude-20261128-005")).toEqual({
+      error: "rate_limited",
+    });
+    released = true;
+    expect(await first).toEqual({ status: "forwarded" });
+    expect(calls).toHaveLength(1);
+    const route = (await relay().getRoutes()).find((r) => r.source === "to-grok")!;
+    expect(route.fire).toMatchObject({
+      perHour: 2,
+      leftHour: 0,
+      lastRateLimitedAt: expect.any(String),
+    });
+  });
+
+  it("answers unavailable without a send while the same id is in flight", async () => {
+    await resetFires();
+    let released = false;
+    const { calls } = mockTarget(async () => {
+      await vi.waitUntil(() => released, { timeout: 2000, interval: 10 });
+      return new Response(null, { status: 200 });
+    });
+    const first = relay().fire("to-claude", "desk-20261128-003");
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    expect(await relay().fire("to-claude", "desk-20261128-003")).toEqual({
+      error: "unavailable",
+    });
+    released = true;
+    expect(await first).toEqual({ status: "forwarded" });
+    expect(calls).toHaveLength(1);
+  });
+
+  it("counts the hour and the day apart and prunes rows older than a day", async () => {
+    await resetFires();
+    const now = Date.now();
+    await runInDurableObject(relay(), async (_instance, state) => {
+      for (const [id, at] of [
+        ["mcp_seed-2h", now - 2 * 60 * 60 * 1000],
+        ["mcp_seed-25h", now - 25 * 60 * 60 * 1000],
+      ] as const)
+        state.storage.sql.exec(
+          `INSERT INTO fires(source, webhook_id, at) VALUES ('to-claude', ?, ?)`,
+          id,
+          at,
+        );
+    });
+    const before = (await relay().getRoutes()).find((r) => r.source === "to-claude")!;
+    expect(before.fire).toMatchObject({ leftHour: 6, leftDay: 19 });
+    mockTarget(() => new Response(null, { status: 200 }));
+    expect(await relay().fire("to-claude", "desk-20261128-004")).toEqual({
+      status: "forwarded",
+    });
+    const after = (await relay().getRoutes()).find((r) => r.source === "to-claude")!;
+    expect(after.fire).toMatchObject({ leftHour: 5, leftDay: 18 });
+    await runInDurableObject(relay(), async (_instance, state) => {
+      expect(
+        state.storage.sql
+          .exec(`SELECT webhook_id FROM fires WHERE webhook_id = 'mcp_seed-25h'`)
+          .toArray(),
+      ).toHaveLength(0);
+    });
+  });
+});
+
+describe("configuration", () => {
+  it("gives no target of a webhook route a longer timeout than fumi allows", () => {
+    for (const [source, config] of Object.entries(SOURCES)) {
+      if (config.kind !== "webhook") continue;
+      for (const target of ROUTES[source]!.targets)
+        expect(TARGETS[target]!.timeoutMs, target).toBeUndefined();
+    }
   });
 });

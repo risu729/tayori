@@ -1,7 +1,8 @@
 import { env, exports } from "cloudflare:workers";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createExecutionContext } from "cloudflare:test";
 import { authenticate } from "../src/access.ts";
 import { handleMcp } from "../src/mcp.ts";
 import { nextLease } from "./helpers.ts";
@@ -76,12 +77,17 @@ describe("MCP tools", () => {
   it("sets the active target and lists routes through the official client", async () => {
     const client = new Client({ name: "synthetic-agent", version: "1" });
     const transport = new StreamableHTTPClientTransport(new URL("https://tayori.takuk.me/mcp"), {
-      fetch: async (url, init) => handleMcp(new Request(url, init), env, "user:synthetic-owner"),
+      fetch: async (url, init) =>
+        handleMcp(new Request(url, init), env, createExecutionContext(), "user:synthetic-owner"),
     });
     await client.connect(transport);
     try {
       const tools = await client.listTools();
-      expect(tools.tools.map((tool) => tool.name).sort()).toEqual(["get_routes", "set_active"]);
+      expect(tools.tools.map((tool) => tool.name).sort()).toEqual([
+        "fire",
+        "get_routes",
+        "set_active",
+      ]);
       const lease = nextLease();
       const set = await client.callTool({
         name: "set_active",
@@ -105,6 +111,61 @@ describe("MCP tools", () => {
       expect(JSON.parse(text).routes[0]).toMatchObject({ source: "fumi", active: "grok-b" });
       expect(text).not.toContain("synthetic-key");
       expect(text).not.toContain("/automations/");
+    } finally {
+      await client.close();
+    }
+  });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("MCP fire", () => {
+  it("fires an mcp source once and refuses other sources and ids", async () => {
+    const calls: Request[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      calls.push(new Request(input, init));
+      return new Response("{}", { status: 200 });
+    });
+    const client = new Client({ name: "synthetic-agent", version: "1" });
+    const transport = new StreamableHTTPClientTransport(new URL("https://tayori.takuk.me/mcp"), {
+      fetch: async (url, init) => {
+        const request = new Request(url, init);
+        // Only the MCP request itself goes through the handler unmocked.
+        return handleMcp(request, env, createExecutionContext(), "user:synthetic-owner");
+      },
+    });
+    await client.connect(transport);
+    try {
+      const text = (result: Awaited<ReturnType<typeof client.callTool>>) =>
+        (result.content as { text: string }[])[0]!.text;
+      const first = await client.callTool({
+        name: "fire",
+        arguments: { source: "to-claude", handoffId: "desk-20261128-101" },
+      });
+      expect(first.isError).not.toBe(true);
+      expect(JSON.parse(text(first))).toEqual({ status: "forwarded" });
+      const again = await client.callTool({
+        name: "fire",
+        arguments: { source: "to-claude", handoffId: "desk-20261128-101" },
+      });
+      expect(JSON.parse(text(again))).toMatchObject({ status: "already_forwarded" });
+      const sends = calls.filter((c) => c.url.startsWith("https://api.anthropic.com/"));
+      expect(sends).toHaveLength(1);
+      const webhook = await client.callTool({
+        name: "fire",
+        arguments: { source: "fumi", handoffId: "desk-20261128-102" },
+      });
+      expect(webhook.isError).toBe(true);
+      expect(text(webhook)).toContain("unknown_source");
+      const badId = await client.callTool({
+        name: "fire",
+        arguments: { source: "to-claude", handoffId: "https://evil.example.invalid/" },
+      });
+      expect(badId.isError).toBe(true);
+      expect(text(badId)).toContain("invalid_arguments");
+      expect(calls.filter((c) => c.url.startsWith("https://api.anthropic.com/"))).toHaveLength(1);
     } finally {
       await client.close();
     }

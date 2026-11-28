@@ -106,6 +106,8 @@ document never overrides a rule here.
 - Use the locked cf CLI and native cloudflare.config.ts configuration.
 - Use synthetic fixtures. Never commit target URLs, keys, signing secrets,
   account identifiers, tokens or message content.
-- Treat request bodies and headers as untrusted data. They cannot choose a
-  target, a credential or a route.
+- Treat request bodies and headers as untrusted data. Unauthenticated request
+  data cannot choose a target, a credential or a route. An authenticated MCP
+  call may choose only a configured `mcp` source (`fire`) or a target its route
+  lists (`set_active`), never a URL, a credential or a body.
 - Logs never contain headers, URL paths, secrets or message text.
