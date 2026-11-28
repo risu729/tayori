@@ -25,3 +25,14 @@ linked evidence.
       the `set_active` call.
 - [ ] Point fumi's routing destination at `https://tayori.takuk.me/in/fumi`
       and run an end-to-end check with a real test mail.
+
+## Phase 2: agents wake each other
+
+- [ ] Add `mcp` sources, the `claude-routine` target and the MCP tool `fire`
+      ([the design](design.md#firing-an-mcp-source)).
+- [ ] The owner regenerates the Claude routine token and sets `TARGET_CLAUDE`,
+      and creates each account's desk webhook automation and sets
+      `TARGET_GROK_A_DESK` and `TARGET_GROK_B_DESK`.
+- [ ] Grok's scheduled run adds `set_active("to-grok", …)`; techo rules say when
+      to fire (urgent handoffs only) and that a sender never retries `unknown`.
+- [ ] End-to-end check in both directions with a test handoff.

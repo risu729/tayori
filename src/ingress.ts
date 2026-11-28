@@ -1,4 +1,4 @@
-import { LIMITS, SOURCES, lookup, type SourceConfig } from "./config.ts";
+import { LIMITS, SOURCES, lookup, type WebhookSourceConfig } from "./config.ts";
 import { decodeSigningSecret, verifyStandardWebhook } from "./standard-webhooks.ts";
 import { HttpError } from "./access.ts";
 import { relayStub } from "./relay.ts";
@@ -23,7 +23,7 @@ async function readLimited(request: Request, max: number): Promise<Uint8Array<Ar
   return body;
 }
 
-function checkBody(config: SourceConfig, body: Uint8Array): boolean {
+function checkBody(config: WebhookSourceConfig, body: Uint8Array): boolean {
   if (config.bodyCheck !== "fumi-notification") return true;
   try {
     const value: unknown = JSON.parse(
@@ -49,7 +49,8 @@ export async function handleIngress(
   source: string,
 ): Promise<Response> {
   const config = lookup(SOURCES, source);
-  if (!config) throw new HttpError(404, "not_found");
+  // An `mcp` source is fired only through MCP, never through `/in/`.
+  if (!config || config.kind !== "webhook") throw new HttpError(404, "not_found");
   if (request.method !== "POST") throw new HttpError(405, "method_not_allowed");
   const body = await readLimited(request, LIMITS.maxBodyBytes);
   const secret = decodeSigningSecret(env[config.secret]);

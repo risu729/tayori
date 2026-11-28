@@ -1,13 +1,13 @@
 # Design
 
 Tayori is a signed webhook relay on Cloudflare Workers. A source POSTs a signed
-delivery; the relay verifies it, deduplicates it and forwards it to the target
-that is active for that source's route. The name comes from _tayori_ (便り, a
-letter or news).
+delivery, or an agent fires an `mcp` source through MCP; the relay verifies it,
+deduplicates it and forwards it to the target that is active for that source's
+route. The name comes from _tayori_ (便り, a letter or news).
 
-Status: the request path, the Relay Durable Object and both MCP tools are
-implemented with synthetic tests and deployed on `tayori.takuk.me` behind Access
-(2026-11-23). The Portal registration and the targets are not done yet; see
+Status: the request path, the Relay Durable Object and the MCP tools are implemented
+with synthetic tests (`fire` added 2026-11-28) and deployed on `tayori.takuk.me` behind
+Access (2026-11-23). The Portal registration and the targets are not done yet; see
 [the roadmap](roadmap.md).
 
 ## Decisions
@@ -24,11 +24,19 @@ implemented with synthetic tests and deployed on `tayori.takuk.me` behind Access
   routine with a webhook trigger but cannot read the trigger's URL or key, so a
   person copies them from the routine panel (gate result, 2026-11-22 14:22 UTC).
 - The repository name is `tayori` (owner, 2026-11-22 14:25 UTC).
+- Agents wake each other through tayori: an `mcp` source is fired with the MCP
+  tool `fire`, and what can be fired and where it goes stays in this reviewed
+  configuration, never in the call. The first two are `to-claude` (a claude.ai
+  Project routine) and `to-grok` (the active account's desk automation, separate
+  from fumi's inbox receiver). The message itself stays in techo `bin/w handoff`;
+  tayori carries only the handoff id (owner, 2026-11-28 07:28, 07:38 and 07:39
+  UTC, after an independent review of the proposal).
 
 ## Words used here
 
-- **Source**: a sender that POSTs into the relay, for example `fumi`. Each source
-  has exactly one route, named after the source.
+- **Source**: a sender. A `webhook` source POSTs into `/in/<source>`, for example
+  `fumi`; an `mcp` source is fired through the MCP tool `fire`, for example
+  `to-claude`. Each source has exactly one route, named after the source.
 - **Target**: a URL the relay forwards to, for example `grok-b`.
 - **Route**: which targets a source's deliveries go to, and how. The first build
   has only `one`: a single active target.
@@ -40,12 +48,23 @@ Deployed configuration, changed only through a reviewed PR:
 
 ```jsonc
 {
-  "sources": { "fumi": { "bodyCheck": "fumi-notification" } },
+  "sources": {
+    "fumi": { "kind": "webhook", "secret": "SOURCE_FUMI_SECRET", "bodyCheck": "fumi-notification" },
+    "to-claude": { "kind": "mcp", "payload": "handoff-id", "limit": { "perHour": 6, "perDay": 20 } },
+    "to-grok": { "kind": "mcp", "payload": "handoff-id", "limit": { "perHour": 2, "perDay": 6 } }
+  },
   "targets": {
     "grok-a": { "auth": "bearer", "secret": "TARGET_GROK_A" },
-    "grok-b": { "auth": "bearer", "secret": "TARGET_GROK_B" }
+    "grok-b": { "auth": "bearer", "secret": "TARGET_GROK_B" },
+    "grok-a-desk": { "auth": "bearer", "secret": "TARGET_GROK_A_DESK" },
+    "grok-b-desk": { "auth": "bearer", "secret": "TARGET_GROK_B_DESK" },
+    "claude": { "auth": "claude-routine", "secret": "TARGET_CLAUDE", "timeoutMs": 10000 }
   },
-  "routes": { "fumi": { "mode": "one", "targets": ["grok-a", "grok-b"] } }
+  "routes": {
+    "fumi": { "mode": "one", "targets": ["grok-a", "grok-b"] },
+    "to-claude": { "mode": "one", "targets": ["claude"] },
+    "to-grok": { "mode": "one", "targets": ["grok-a-desk", "grok-b-desk"] }
+  }
 }
 ```
 
@@ -56,6 +75,15 @@ Deployed configuration, changed only through a reviewed PR:
   `{"url":"https://api2.cursor.sh/automations/webhook/<id>","key":"crsr_…"}`.
   The target is called with `Authorization: Bearer <key>`. No URL or key is kept
   in a repository, a chat or a log.
+
+- `TARGET_GROK_A_DESK` and `TARGET_GROK_B_DESK` have the same shape, for each
+  account's desk automation, which receives `to-grok`.
+
+- `TARGET_CLAUDE` holds
+  `{"url":"https://api.anthropic.com/v1/claude_code/routines/trig_<id>/fire","key":"sk-ant-oat01-…"}`
+  for the claude.ai routine that receives `to-claude`. The routine's token only fires
+  that routine (owner, 2026-11-28 07:36 UTC). A `claude-routine` target must use host
+  `api.anthropic.com` with no port or query and that path.
 
 - `SOURCE_FUMI_SECRET` is the Standard Webhooks secret that fumi signs with.
 
@@ -72,7 +100,8 @@ Deployed configuration, changed only through a reviewed PR:
   ```
 
 - A deploy never changes the active target. A `one` route with no active target
-  answers 503, so the source retries.
+  answers 503, so the source retries. A `one` route that lists exactly one target
+  uses it without an active-target row.
 
 ## Request path
 
@@ -116,12 +145,58 @@ Each forward is logged with the source, the target, the status, a reason and the
 age of `setAt`. Logs never contain headers, URL paths, secrets or message text.
 Deduplication rows are kept for 7 days.
 
+## Firing an `mcp` source
+
+`fire(source, handoffId)` is an MCP tool. `handoffId` is a techo handoff id
+matching `^[a-z0-9][a-z0-9-]{0,31}-[0-9]{8}-[0-9]{3,4}$`, such as
+`claude-20261128-001`; no other input is accepted.
+
+1. **Check.** The source must be a configured `mcp` source; `/in/<source>`
+   answers 404 for one, and `fire` answers `unknown_source` for a `webhook`
+   source.
+2. **Deduplicate** on (`source`, `mcp_<handoffId>`) in the same table:
+   - `forwarded`: answer `already_forwarded` with the first send time;
+   - `sending` inside its lock: answer `unavailable`;
+   - `unknown`, or `sending` past its lock: answer `unknown`. No receiver has an
+     idempotency key, so a send that may have arrived is never repeated; a missed
+     wake is picked up by the receiver's scheduled check, while a repeat would
+     start a second session.
+3. **Limit.** Sends in the rolling hour and day are counted in a `fires` table.
+   Over either limit, answer `rate_limited`. The slot and the `sending` row are
+   written in one synchronous block before the send, so concurrent fires cannot
+   both pass; a `cleared` outcome gives the slot back.
+4. **Send** inside the Durable Object, under `ctx.waitUntil` in the MCP handler,
+   with a body the Relay builds:
+   - `bearer`: `{"source":"to-grok","handoffId":"claude-20261128-001"}` with the
+     `webhook-id` header `mcp_<handoffId>`;
+   - `claude-routine`: `{}` with `anthropic-version: 2023-06-01` and
+     `anthropic-beta: experimental-cc-routine-2026-04-01`, and no `webhook-id`. A
+     Project routine answers a body with `text` with 403 "this project is paused"
+     (anthropics/claude-code issues 102874 and 112401), while `{}` opened a new
+     Project thread (2026-11-28 06:29 UTC). The receiver reads its handoffs from
+     techo.
+   - The timeout is the target's `timeoutMs` (10 s for `claude`), else 3 s.
+5. **Answer.** `forwarded`, or `unknown` for a timeout, or `unavailable` for any
+   cleared outcome. Responses are classified as for `/in/`.
+
+Each fire is logged with the principal, user agent, source, handoff id and
+outcome, never headers, URL paths, keys or message text.
+
+What an injected Portal client can do with `fire`: wake one of the configured
+receivers up to its limit (at most about 4.4 % of Grok's weekly limit a day for
+`to-grok`), use up a limit so real wakes get `rate_limited`, or fire a predictable
+future handoff id first, so the real `fire` gets `already_forwarded` with an early
+`firstAt`. It cannot choose a URL, credential, body or unlisted route. In each case
+the wake is lost or delayed, not misdirected, and the receivers' scheduled checks
+still read the handoff.
+
 ## Choosing the active target
 
 `set_active(source, target, leaseUnix)` is an MCP tool.
 
 - **Who calls it.** Only a Grok scheduled run on the active account calls it,
-  passing its own target and the unix time of its lease. Webhook-started runs and
+  passing its own target and the unix time of its lease, once for `fumi` and once
+  for `to-grok` with its desk target. Webhook-started runs and
   inactive accounts never call it.
 - **What the relay accepts.** It refuses a `leaseUnix` older than the stored one,
   so two accounts cannot flip the route back and forth, and a target that the
@@ -129,9 +204,9 @@ Deduplication rows are kept for 7 days.
   also refuses a `leaseUnix` more than 5 minutes in the future, since the lease
   time is when the lease was recorded and a future one would block the real
   holder until then.
-- **Staleness.** Nothing switches automatically. Every forward logs the age of
-  `setAt`, and a daily agent check compares the relay's active target with the
-  owner's own record of the active account. The agent may read git; the relay
+- **Staleness.** Nothing switches automatically. Every forward logs the age of `setAt`,
+  and a daily agent check compares the relay's active targets (`fumi` and `to-grok`)
+  with the owner's own record of the active account. The agent may read git; the relay
   does not.
 - **A switch during a delivery.** A forward that ends `unknown` is resent to the
   new target, so both accounts may handle the same mail. The receiver's "already
@@ -154,7 +229,8 @@ Every other host or path returns 404. `workers.dev` and preview URLs are off.
 | Tool                                    | What it does                           | Returns                                                   |
 | --------------------------------------- | -------------------------------------- | --------------------------------------------------------- |
 | `set_active(source, target, leaseUnix)` | Sets the active target of a `one` route | `{source, active, leaseUnix, setAt}` or a refusal reason |
-| `get_routes()`                          | Lists each route and target            | Active target, `setAt` and age, each target's host and last delivery status; never a URL path or key |
+| `get_routes()`                          | Lists each route and target            | Active target, `setAt` and age, each target's host and last delivery status, and for `mcp` sources the sends left this hour and day and the last `rate_limited`; never a URL path or key |
+| `fire(source, handoffId)`               | Wakes an `mcp` source's receiver once per handoff id | `{status: "forwarded"}`, `{status: "already_forwarded", firstAt}`, or an error code: `invalid_arguments`, `unknown_source`, `rate_limited`, `unavailable`, `unknown` |
 
 All Portal clients share one owner principal. An injected `set_active` call can
 only choose another target that the route already lists; that shows in the log

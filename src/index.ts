@@ -25,7 +25,7 @@ async function route(request: Request, env: Env, ctx: ExecutionContext): Promise
     const origin = request.headers.get("origin");
     if (origin !== null && origin !== url.origin) throw new HttpError(403, "origin_not_allowed");
     const principal = await authenticate(request, env);
-    return handleMcp(request, env, principal);
+    return handleMcp(request, env, ctx, principal);
   }
   throw new HttpError(404, "not_found");
 }

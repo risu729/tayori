@@ -12,17 +12,41 @@ export const LIMITS = {
   retentionMs: 7 * 24 * 60 * 60 * 1000,
 } as const;
 
-type SecretName = "SOURCE_FUMI_SECRET" | "TARGET_GROK_A" | "TARGET_GROK_B";
+/** A techo handoff id, such as `claude-20261128-001` (techo `bin/handoff`). */
+export const HANDOFF_ID = /^[a-z0-9][a-z0-9-]{0,31}-[0-9]{8}-[0-9]{3,4}$/;
 
-export interface SourceConfig {
+type SecretName =
+  | "SOURCE_FUMI_SECRET"
+  | "TARGET_GROK_A"
+  | "TARGET_GROK_B"
+  | "TARGET_GROK_A_DESK"
+  | "TARGET_GROK_B_DESK"
+  | "TARGET_CLAUDE";
+
+/** A source that POSTs a Standard Webhooks delivery to `/in/<source>`. */
+export interface WebhookSourceConfig {
+  kind: "webhook";
   /** Worker secret holding the source's Standard Webhooks `whsec_` secret. */
   secret: SecretName;
   bodyCheck?: "fumi-notification";
 }
+/** A source fired through the MCP tool `fire` with a techo handoff id only. */
+export interface McpSourceConfig {
+  kind: "mcp";
+  payload: "handoff-id";
+  /** Sends allowed in a rolling hour and day; a cleared send gives its slot back. */
+  limit: { perHour: number; perDay: number };
+}
+export type SourceConfig = WebhookSourceConfig | McpSourceConfig;
+
 export interface TargetConfig {
-  auth: "bearer";
+  /** `bearer`: any HTTPS URL with `Authorization: Bearer`. `claude-routine`: a
+   * claude.ai routine's API fire URL, called with an empty JSON body. */
+  auth: "bearer" | "claude-routine";
   /** Worker secret holding `{"url":"https://…","key":"…"}`. */
   secret: SecretName;
+  /** Overrides `LIMITS.forwardTimeoutMs`; only for targets no `webhook` source uses. */
+  timeoutMs?: number;
 }
 export interface RouteConfig {
   mode: "one";
@@ -30,15 +54,22 @@ export interface RouteConfig {
 }
 
 export const SOURCES: Readonly<Record<string, SourceConfig>> = {
-  fumi: { secret: "SOURCE_FUMI_SECRET", bodyCheck: "fumi-notification" },
+  fumi: { kind: "webhook", secret: "SOURCE_FUMI_SECRET", bodyCheck: "fumi-notification" },
+  "to-claude": { kind: "mcp", payload: "handoff-id", limit: { perHour: 6, perDay: 20 } },
+  "to-grok": { kind: "mcp", payload: "handoff-id", limit: { perHour: 2, perDay: 6 } },
 };
 export const TARGETS: Readonly<Record<string, TargetConfig>> = {
   "grok-a": { auth: "bearer", secret: "TARGET_GROK_A" },
   "grok-b": { auth: "bearer", secret: "TARGET_GROK_B" },
+  "grok-a-desk": { auth: "bearer", secret: "TARGET_GROK_A_DESK" },
+  "grok-b-desk": { auth: "bearer", secret: "TARGET_GROK_B_DESK" },
+  claude: { auth: "claude-routine", secret: "TARGET_CLAUDE", timeoutMs: 10_000 },
 };
 /** Each source has exactly one route, named after the source. */
 export const ROUTES: Readonly<Record<string, RouteConfig>> = {
   fumi: { mode: "one", targets: ["grok-a", "grok-b"] },
+  "to-claude": { mode: "one", targets: ["claude"] },
+  "to-grok": { mode: "one", targets: ["grok-a-desk", "grok-b-desk"] },
 };
 
 export function lookup<T>(table: Readonly<Record<string, T>>, name: string): T | undefined {

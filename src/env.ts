@@ -6,6 +6,9 @@ declare global {
       SOURCE_FUMI_SECRET?: string;
       TARGET_GROK_A?: string;
       TARGET_GROK_B?: string;
+      TARGET_GROK_A_DESK?: string;
+      TARGET_GROK_B_DESK?: string;
+      TARGET_CLAUDE?: string;
       ACCESS_ISSUER?: string;
       ACCESS_AUDIENCE?: string;
       /** JSON array of Access principals allowed to call MCP, such as `["user:<sub>"]`. */

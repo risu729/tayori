@@ -1,10 +1,19 @@
+import type { TargetConfig } from "./config.ts";
+
 /** A target secret: `{"url":"https://…","key":"…"}`, set by the owner. */
 export interface TargetEndpoint {
   url: URL;
   key: string;
 }
 
-export function parseTarget(secret: unknown): TargetEndpoint | null {
+/** The only URL shape a `claude-routine` target may use. */
+const CLAUDE_ROUTINE_HOST = "api.anthropic.com";
+const CLAUDE_ROUTINE_PATH = /^\/v1\/claude_code\/routines\/trig_[A-Za-z0-9]{1,128}\/fire$/;
+
+export function parseTarget(
+  secret: unknown,
+  auth: TargetConfig["auth"] = "bearer",
+): TargetEndpoint | null {
   if (typeof secret !== "string" || secret.length > 4096) return null;
   try {
     const value: unknown = JSON.parse(secret);
@@ -15,6 +24,14 @@ export function parseTarget(secret: unknown): TargetEndpoint | null {
     if (!/^[\x21-\x7e]{1,1024}$/.test(key)) return null;
     const parsed = new URL(url);
     if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.hash)
+      return null;
+    if (
+      auth === "claude-routine" &&
+      (parsed.hostname !== CLAUDE_ROUTINE_HOST ||
+        parsed.port ||
+        parsed.search ||
+        !CLAUDE_ROUTINE_PATH.test(parsed.pathname))
+    )
       return null;
     return { url: parsed, key };
   } catch {
