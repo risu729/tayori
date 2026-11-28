@@ -270,11 +270,17 @@ UTC), which also attached the Custom Domain; the normal job then deployed (run
 the `cf_cli` source, so later deploys are unaffected.
 
 Set secrets through the API or `cf`, not the Cloudflare dashboard. Secrets added in
-the dashboard on 2026-11-28 (09:22 and 09:24 UTC) saved versions whose `RELAY`
-binding has no `script_name`, and the next strict deploy
+the dashboard on 2026-11-28 (09:22 and 09:24 UTC) made `dash` the Worker's last
+deployment source, and the next strict deploy
 ([run 46138427543](https://github.com/risu729/tayori/actions/runs/46138427543))
-stopped on that configuration difference. A temporary `Redeploy` workflow deploys
-the checked main commit once with `cf deploy --force`, which keeps the secrets.
+stopped on the `RELAY` binding's `script_name`, which the API never returns. With a
+`dash` source, `cf deploy --force` also stops, because it reads the Worker's routes and
+Custom Domains, which the CI token cannot. A settings PATCH through the API that
+restated the `Relay` export (11:30 UTC, owner approval) made the source `api`, a
+temporary `Redeploy` workflow then deployed the checked main commit once with
+`cf deploy --force`
+([run 46140673163](https://github.com/risu729/tayori/actions/runs/46140673163)), which
+keeps the secrets, and the workflow was removed.
 
 ## Later, when a real need exists
 
