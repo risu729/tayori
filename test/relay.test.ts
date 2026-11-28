@@ -10,6 +10,27 @@ import { nextLease, notification, signedRequest } from "./helpers.ts";
 const worker = exports.default;
 const relay = () => relayStub(env);
 
+function mcpLimit(source: string) {
+  const config = SOURCES[source]!;
+  if (config.kind !== "mcp") throw new Error(`${source} is not an mcp source`);
+  return config.limit;
+}
+const grokPerHour = mcpLimit("to-grok").perHour;
+const claudeLimit = mcpLimit("to-claude");
+
+/** Records `count` sends of `source` made just now. */
+async function seedFires(source: string, count: number) {
+  await runInDurableObject(relay(), async (_instance, state) => {
+    for (let i = 0; i < count; i++)
+      state.storage.sql.exec(
+        `INSERT INTO fires(source, webhook_id, at) VALUES (?, ?, ?)`,
+        source,
+        `mcp_seed-${i}`,
+        Date.now(),
+      );
+  });
+}
+
 async function activate(target: "grok-a-inbox" | "grok-b-inbox") {
   const result = await relay().setActive("fumi", target, nextLease());
   expect(result.ok).toBe(true);
@@ -259,7 +280,7 @@ describe("set_active", () => {
     ]);
     expect(routes[1]).toMatchObject({ active: "claude", setAt: null });
     expect(routes[1]!.targets[0]).toMatchObject({ configured: true, host: "api.anthropic.com" });
-    expect(routes[1]!.fire).toMatchObject({ perHour: 6, perDay: 20 });
+    expect(routes[1]!.fire).toMatchObject({ perHour: 12, perDay: 50 });
     expect(routes[0]!.fire).toBeUndefined();
     const text = JSON.stringify(routes);
     expect(text).not.toContain("synthetic-key");
@@ -444,14 +465,9 @@ describe("fire", () => {
     expect(timeout.calls).toHaveLength(1);
     vi.restoreAllMocks();
     await resetFires();
-    // With one of the two hourly slots taken, the retry passes only if the
+    // With all but one hourly slot taken, the retry passes only if the
     // cleared send gave its slot back.
-    await runInDurableObject(relay(), async (_instance, state) => {
-      state.storage.sql.exec(
-        `INSERT INTO fires(source, webhook_id, at) VALUES ('to-grok', 'mcp_seed-cleared', ?)`,
-        Date.now(),
-      );
-    });
+    await seedFires("to-grok", grokPerHour - 1);
     const responses = [new Response(null, { status: 500 }), new Response(null, { status: 200 })];
     const cleared = mockTarget(() => responses.shift()!);
     expect(await relay().fire("to-grok", "claude-20261128-003")).toEqual({
@@ -466,18 +482,13 @@ describe("fire", () => {
   it("limits sends per hour, counting a send in flight, and reports it", async () => {
     await resetFires();
     expect((await relay().setActive("to-grok", "grok-a-desk", nextLease())).ok).toBe(true);
-    await runInDurableObject(relay(), async (_instance, state) => {
-      state.storage.sql.exec(
-        `INSERT INTO fires(source, webhook_id, at) VALUES ('to-grok', 'mcp_seed', ?)`,
-        Date.now(),
-      );
-    });
+    await seedFires("to-grok", grokPerHour - 1);
     let released = false;
     const { calls } = mockTarget(async () => {
       await vi.waitUntil(() => released, { timeout: 2000, interval: 10 });
       return new Response(null, { status: 200 });
     });
-    // perHour is 2: the seeded row and this in-flight send use both slots.
+    // The seeded rows and this in-flight send use every hourly slot.
     const first = relay().fire("to-grok", "claude-20261128-004");
     await vi.waitFor(() => expect(calls).toHaveLength(1));
     expect(await relay().fire("to-grok", "claude-20261128-005")).toEqual({
@@ -488,7 +499,7 @@ describe("fire", () => {
     expect(calls).toHaveLength(1);
     const route = (await relay().getRoutes()).find((r) => r.source === "to-grok")!;
     expect(route.fire).toMatchObject({
-      perHour: 2,
+      perHour: grokPerHour,
       leftHour: 0,
       lastRateLimitedAt: expect.any(String),
     });
@@ -526,13 +537,19 @@ describe("fire", () => {
         );
     });
     const before = (await relay().getRoutes()).find((r) => r.source === "to-claude")!;
-    expect(before.fire).toMatchObject({ leftHour: 6, leftDay: 19 });
+    expect(before.fire).toMatchObject({
+      leftHour: claudeLimit.perHour,
+      leftDay: claudeLimit.perDay - 1,
+    });
     mockTarget(() => new Response(null, { status: 200 }));
     expect(await relay().fire("to-claude", "desk-20261128-004")).toEqual({
       status: "forwarded",
     });
     const after = (await relay().getRoutes()).find((r) => r.source === "to-claude")!;
-    expect(after.fire).toMatchObject({ leftHour: 5, leftDay: 18 });
+    expect(after.fire).toMatchObject({
+      leftHour: claudeLimit.perHour - 1,
+      leftDay: claudeLimit.perDay - 2,
+    });
     await runInDurableObject(relay(), async (_instance, state) => {
       expect(
         state.storage.sql

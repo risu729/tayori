@@ -55,8 +55,8 @@ export interface RouteConfig {
 
 export const SOURCES: Readonly<Record<string, SourceConfig>> = {
   fumi: { kind: "webhook", secret: "SOURCE_FUMI_SECRET", bodyCheck: "fumi-notification" },
-  "to-claude": { kind: "mcp", payload: "handoff-id", limit: { perHour: 6, perDay: 20 } },
-  "to-grok": { kind: "mcp", payload: "handoff-id", limit: { perHour: 2, perDay: 6 } },
+  "to-claude": { kind: "mcp", payload: "handoff-id", limit: { perHour: 12, perDay: 50 } },
+  "to-grok": { kind: "mcp", payload: "handoff-id", limit: { perHour: 6, perDay: 30 } },
 };
 export const TARGETS: Readonly<Record<string, TargetConfig>> = {
   "grok-a-inbox": { auth: "bearer", secret: "TARGET_GROK_A_INBOX" },
