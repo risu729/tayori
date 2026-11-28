@@ -164,6 +164,8 @@ describe("MCP fire", () => {
         arguments: { source: "to-claude", handoffId: "https://evil.example.invalid/" },
       });
       expect(badId.isError).toBe(true);
+      expect(text(badId)).toContain("invalid_arguments");
+      expect(calls.filter((c) => c.url.startsWith("https://api.anthropic.com/"))).toHaveLength(1);
     } finally {
       await client.close();
     }

@@ -334,10 +334,19 @@ export class Relay extends DurableObject<Env> {
     // (`unknown`, or `sending` past its lock) is never repeated.
     if (existing) return { error: "unknown" };
 
-    const { target } = this.activeTarget(source);
+    const { target, setAt } = this.activeTarget(source);
     const resolved = target ? this.resolve(target) : null;
     const log = (fields: Record<string, unknown>) =>
-      console.log(JSON.stringify({ event: "forward", source, target, ...fields }));
+      console.log(
+        JSON.stringify({
+          event: "forward",
+          source,
+          handoffId,
+          target,
+          setAgeSeconds: setAt === null ? null : Math.round((now - setAt) / 1000),
+          ...fields,
+        }),
+      );
     if (!target || !resolved) {
       if (target) this.noteTarget(target, "config_error", "target_not_configured", now);
       log({

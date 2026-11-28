@@ -3,6 +3,7 @@ import { env, exports } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createExecutionContext, runInDurableObject } from "cloudflare:test";
 import { handleIngress } from "../src/ingress.ts";
+import { ROUTES, SOURCES, TARGETS } from "../src/config.ts";
 import { classifyResponse, relayStub } from "../src/relay.ts";
 import { nextLease, notification, signedRequest } from "./helpers.ts";
 
@@ -438,6 +439,14 @@ describe("fire", () => {
     expect(timeout.calls).toHaveLength(1);
     vi.restoreAllMocks();
     await resetFires();
+    // With one of the two hourly slots taken, the retry passes only if the
+    // cleared send gave its slot back.
+    await runInDurableObject(relay(), async (_instance, state) => {
+      state.storage.sql.exec(
+        `INSERT INTO fires(source, webhook_id, at) VALUES ('to-grok', 'mcp_seed-cleared', ?)`,
+        Date.now(),
+      );
+    });
     const responses = [new Response(null, { status: 500 }), new Response(null, { status: 200 })];
     const cleared = mockTarget(() => responses.shift()!);
     expect(await relay().fire("to-grok", "claude-20261128-003")).toEqual({
@@ -495,5 +504,46 @@ describe("fire", () => {
     released = true;
     expect(await first).toEqual({ status: "forwarded" });
     expect(calls).toHaveLength(1);
+  });
+
+  it("counts the hour and the day apart and prunes rows older than a day", async () => {
+    await resetFires();
+    const now = Date.now();
+    await runInDurableObject(relay(), async (_instance, state) => {
+      for (const [id, at] of [
+        ["mcp_seed-2h", now - 2 * 60 * 60 * 1000],
+        ["mcp_seed-25h", now - 25 * 60 * 60 * 1000],
+      ] as const)
+        state.storage.sql.exec(
+          `INSERT INTO fires(source, webhook_id, at) VALUES ('to-claude', ?, ?)`,
+          id,
+          at,
+        );
+    });
+    const before = (await relay().getRoutes()).find((r) => r.source === "to-claude")!;
+    expect(before.fire).toMatchObject({ leftHour: 6, leftDay: 19 });
+    mockTarget(() => new Response(null, { status: 200 }));
+    expect(await relay().fire("to-claude", "desk-20261128-004")).toEqual({
+      status: "forwarded",
+    });
+    const after = (await relay().getRoutes()).find((r) => r.source === "to-claude")!;
+    expect(after.fire).toMatchObject({ leftHour: 5, leftDay: 18 });
+    await runInDurableObject(relay(), async (_instance, state) => {
+      expect(
+        state.storage.sql
+          .exec(`SELECT webhook_id FROM fires WHERE webhook_id = 'mcp_seed-25h'`)
+          .toArray(),
+      ).toHaveLength(0);
+    });
+  });
+});
+
+describe("configuration", () => {
+  it("gives no target of a webhook route a longer timeout than fumi allows", () => {
+    for (const [source, config] of Object.entries(SOURCES)) {
+      if (config.kind !== "webhook") continue;
+      for (const target of ROUTES[source]!.targets)
+        expect(TARGETS[target]!.timeoutMs, target).toBeUndefined();
+    }
   });
 });

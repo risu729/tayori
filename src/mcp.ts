@@ -109,7 +109,13 @@ export function createRelayMcpServer(
       // Relay off between sending and recording the outcome.
       const pending = relay.fire(input.source, input.handoffId);
       ctx.waitUntil(pending.catch(() => undefined));
-      const outcome = await pending.catch(() => ({ error: "unavailable" as const }));
+      // A failed RPC may have sent already, so it is `unknown`, never `unavailable`.
+      const outcome = await pending.catch(() => {
+        console.log(
+          JSON.stringify({ event: "fire", source: input.source, outcome: "relay_error" }),
+        );
+        return { error: "unknown" as const };
+      });
       console.log(
         JSON.stringify({
           event: "fire",

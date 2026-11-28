@@ -172,12 +172,15 @@ matching `^[a-z0-9][a-z0-9-]{0,31}-[0-9]{8}-[0-9]{3,4}$`, such as
    - `claude-routine`: `{}` with `anthropic-version: 2023-06-01` and
      `anthropic-beta: experimental-cc-routine-2026-04-01`, and no `webhook-id`. A
      Project routine answers a body with `text` with 403 "this project is paused"
-     (anthropics/claude-code issues 102874 and 112401), while `{}` opened a new
-     Project thread (2026-11-28 06:29 UTC). The receiver reads its handoffs from
-     techo.
+     (anthropics/claude-code
+     [#102874](https://github.com/anthropics/claude-code/issues/102874) and
+     [#112401](https://github.com/anthropics/claude-code/issues/112401)), while `{}`
+     opened a new Project thread (2026-11-28 06:29 UTC). The receiver reads its handoffs
+     from techo.
    - The timeout is the target's `timeoutMs` (10 s for `claude`), else 3 s.
-5. **Answer.** `forwarded`, or `unknown` for a timeout, or `unavailable` for any
-   cleared outcome. Responses are classified as for `/in/`.
+5. **Answer.** `forwarded`, or `unknown` for a timeout or a failed call into the
+   Relay (it may have sent already), or `unavailable` for any cleared outcome.
+   Responses are classified as for `/in/`.
 
 Each fire is logged with the principal, user agent, source, handoff id and
 outcome, never headers, URL paths, keys or message text.
@@ -245,16 +248,16 @@ Custom Domain, as risu729/infra's application domain delivery expects. The
 `production` Environment's `CLOUDFLARE_API_TOKEN` has Individual Workers Editor
 on `tayori` and Workers Routes Write on `takuk.me`; its metadata lives in infra.
 
-The Worker was created once through the Cloudflare API as a placeholder that
-returns 404, with the `Relay` SQLite class migration, so the token could be
-scoped to it (owner approval, 2026-11-22 15:16 UTC). The domain was not
-attached by hand. The first Deploy Worker run (2026-11-23 02:33 UTC) stopped
-because `cf workers versions create` in CI refuses to replace a Worker last
-updated through the script API. A temporary `Bootstrap` workflow replaced it
-once with `cf deploy --force` (run 45101831603, 02:45 UTC), which also attached
-the Custom Domain; the normal job then deployed (run 45102502321) and the
-workflow was removed. Setting Worker secrets through the API keeps the
-`cf_cli` source, so later deploys are unaffected.
+The Worker was created once through the Cloudflare API as a placeholder that returns
+404, with the `Relay` SQLite class migration, so the token could be scoped to it (owner
+approval, 2026-11-22 15:16 UTC). The domain was not attached by hand. The first Deploy
+Worker run (2026-11-23 02:33 UTC) stopped because `cf workers versions create` in CI
+refuses to replace a Worker last updated through the script API. A temporary `Bootstrap`
+workflow replaced it once with `cf deploy --force`
+([run 45101831603](https://github.com/risu729/tayori/actions/runs/45101831603), 02:45
+UTC), which also attached the Custom Domain; the normal job then deployed (run
+45102502321) and the workflow was removed. Setting Worker secrets through the API keeps
+the `cf_cli` source, so later deploys are unaffected.
 
 ## Later, when a real need exists
 
