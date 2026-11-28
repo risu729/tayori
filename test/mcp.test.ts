@@ -91,24 +91,24 @@ describe("MCP tools", () => {
       const lease = nextLease();
       const set = await client.callTool({
         name: "set_active",
-        arguments: { source: "fumi", target: "grok-b", leaseUnix: lease },
+        arguments: { source: "fumi", target: "grok-b-inbox", leaseUnix: lease },
       });
       expect(set.isError).not.toBe(true);
       const content = set.content as { type: string; text: string }[];
       expect(JSON.parse(content[0]!.text)).toMatchObject({
         source: "fumi",
-        active: "grok-b",
+        active: "grok-b-inbox",
         leaseUnix: lease,
       });
       const stale = await client.callTool({
         name: "set_active",
-        arguments: { source: "fumi", target: "grok-a", leaseUnix: lease - 1 },
+        arguments: { source: "fumi", target: "grok-a-inbox", leaseUnix: lease - 1 },
       });
       expect(stale.isError).toBe(true);
       expect(JSON.stringify(stale.content)).toContain("stale_lease");
       const routes = await client.callTool({ name: "get_routes", arguments: {} });
       const text = (routes.content as { text: string }[])[0]!.text;
-      expect(JSON.parse(text).routes[0]).toMatchObject({ source: "fumi", active: "grok-b" });
+      expect(JSON.parse(text).routes[0]).toMatchObject({ source: "fumi", active: "grok-b-inbox" });
       expect(text).not.toContain("synthetic-key");
       expect(text).not.toContain("/automations/");
     } finally {

@@ -31,13 +31,15 @@ Access (2026-11-23). The Portal registration and the targets are not done yet; s
   from fumi's inbox receiver). The message itself stays in techo `bin/w handoff`;
   tayori carries only the handoff id (owner, 2026-11-28 07:28, 07:38 and 07:39
   UTC, after an independent review of the proposal).
+- fumi's targets are named after the bot that receives them, `grok-a-inbox` and
+  `grok-b-inbox`, like the `-desk` targets (owner, 2026-11-28 08:54 UTC).
 
 ## Words used here
 
 - **Source**: a sender. A `webhook` source POSTs into `/in/<source>`, for example
   `fumi`; an `mcp` source is fired through the MCP tool `fire`, for example
   `to-claude`. Each source has exactly one route, named after the source.
-- **Target**: a URL the relay forwards to, for example `grok-b`.
+- **Target**: a URL the relay forwards to, for example `grok-b-inbox`.
 - **Route**: which targets a source's deliveries go to, and how. The first build
   has only `one`: a single active target.
 - **Active target**: for a `one` route, the target used right now.
@@ -54,14 +56,14 @@ Deployed configuration, changed only through a reviewed PR:
     "to-grok": { "kind": "mcp", "payload": "handoff-id", "limit": { "perHour": 2, "perDay": 6 } }
   },
   "targets": {
-    "grok-a": { "auth": "bearer", "secret": "TARGET_GROK_A" },
-    "grok-b": { "auth": "bearer", "secret": "TARGET_GROK_B" },
+    "grok-a-inbox": { "auth": "bearer", "secret": "TARGET_GROK_A_INBOX" },
+    "grok-b-inbox": { "auth": "bearer", "secret": "TARGET_GROK_B_INBOX" },
     "grok-a-desk": { "auth": "bearer", "secret": "TARGET_GROK_A_DESK" },
     "grok-b-desk": { "auth": "bearer", "secret": "TARGET_GROK_B_DESK" },
     "claude": { "auth": "claude-routine", "secret": "TARGET_CLAUDE", "timeoutMs": 10000 }
   },
   "routes": {
-    "fumi": { "mode": "one", "targets": ["grok-a", "grok-b"] },
+    "fumi": { "mode": "one", "targets": ["grok-a-inbox", "grok-b-inbox"] },
     "to-claude": { "mode": "one", "targets": ["claude"] },
     "to-grok": { "mode": "one", "targets": ["grok-a-desk", "grok-b-desk"] }
   }
@@ -71,7 +73,7 @@ Deployed configuration, changed only through a reviewed PR:
 - Each Grok account runs its bot as a Cursor automation, so a Grok target is
   that automation's webhook trigger.
 
-- `TARGET_GROK_A` and `TARGET_GROK_B` are Worker secrets holding
+- `TARGET_GROK_A_INBOX` and `TARGET_GROK_B_INBOX` are Worker secrets holding
   `{"url":"https://api2.cursor.sh/automations/webhook/<id>","key":"crsr_…"}`.
   The target is called with `Authorization: Bearer <key>`. No URL or key is kept
   in a repository, a chat or a log.
@@ -96,7 +98,7 @@ Deployed configuration, changed only through a reviewed PR:
 - Runtime state lives only in a Durable Object, for example:
 
   ```jsonc
-  { "route": "fumi", "active": "grok-b", "leaseUnix": 1795196087, "setAt": "2026-11-21T17:34:12Z" }
+  { "route": "fumi", "active": "grok-b-inbox", "leaseUnix": 1795196087, "setAt": "2026-11-21T17:34:12Z" }
   ```
 
 - A deploy never changes the active target. A `one` route with no active target
