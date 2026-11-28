@@ -269,6 +269,13 @@ UTC), which also attached the Custom Domain; the normal job then deployed (run
 45102502321) and the workflow was removed. Setting Worker secrets through the API keeps
 the `cf_cli` source, so later deploys are unaffected.
 
+Set secrets through the API or `cf`, not the Cloudflare dashboard. Secrets added in
+the dashboard on 2026-11-28 (09:22 and 09:24 UTC) saved versions whose `RELAY`
+binding has no `script_name`, and the next strict deploy
+([run 46138427543](https://github.com/risu729/tayori/actions/runs/46138427543))
+stopped on that configuration difference. A temporary `Redeploy` workflow deploys
+the checked main commit once with `cf deploy --force`, which keeps the secrets.
+
 ## Later, when a real need exists
 
 - `mode: "all"`, deduplicating on (`source`, `webhook-id`, `target`).

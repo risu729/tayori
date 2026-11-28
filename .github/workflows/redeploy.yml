@@ -1,0 +1,47 @@
+name: Redeploy
+# Temporary, one manual run. Secrets added in the Cloudflare dashboard on
+# 2026-11-28 (09:22 and 09:24 UTC) saved versions whose Durable Object binding has
+# no `script_name`, so the strict deploy in CI stops on the configuration
+# difference. This run deploys the checked main commit once through
+# `cf deploy --force` and keeps the secrets. Remove this workflow once the normal
+# Deploy Worker job succeeds again.
+on:
+  workflow_dispatch:
+permissions: {}
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: ci-CI-refs/heads/main
+  cancel-in-progress: false
+jobs:
+  bootstrap:
+    name: Redeploy over the dashboard versions
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install locked tools
+        uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
+        with:
+          version: 2026.11.10
+          install_args: --locked
+          cache: "false"
+      # Install the locked dependencies before any step that holds the token.
+      - name: Install locked dependencies
+        run: mise deps
+      - name: Build and validate the production Worker
+        run: mise run check:output
+      - name: Deploy once over the dashboard versions
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CI: "true"
+        run: node_modules/.bin/cf deploy --prebuilt --mode production --worker tayori --force
