@@ -33,6 +33,11 @@ Access (2026-11-23). The Portal registration and the targets are not done yet; s
   UTC, after an independent review of the proposal).
 - fumi's targets are named after the bot that receives them, `grok-a-inbox` and
   `grok-b-inbox`, like the `-desk` targets (owner, 2026-11-28 08:54 UTC).
+- The `fire` limits are raised from 6 an hour and 20 a day to 12 and 50 for
+  `to-claude`, and from 2 and 6 to 4 and 15 for `to-grok`, because the owner
+  expects the earlier limits to run out (owner, 2026-11-28 10:52 UTC). This is
+  the owner's estimate, not measured fire demand: on 2026-11-24 Claude wrote 30
+  handoffs in techo, all `[fyi]`, and senders fire only for urgent ones.
 
 ## Words used here
 
@@ -53,7 +58,7 @@ Deployed configuration, changed only through a reviewed PR:
   "sources": {
     "fumi": { "kind": "webhook", "secret": "SOURCE_FUMI_SECRET", "bodyCheck": "fumi-notification" },
     "to-claude": { "kind": "mcp", "payload": "handoff-id", "limit": { "perHour": 12, "perDay": 50 } },
-    "to-grok": { "kind": "mcp", "payload": "handoff-id", "limit": { "perHour": 6, "perDay": 30 } }
+    "to-grok": { "kind": "mcp", "payload": "handoff-id", "limit": { "perHour": 4, "perDay": 15 } }
   },
   "targets": {
     "grok-a-inbox": { "auth": "bearer", "secret": "TARGET_GROK_A_INBOX" },
@@ -72,11 +77,6 @@ Deployed configuration, changed only through a reviewed PR:
 
 - Each Grok account runs its bot as a Cursor automation, so a Grok target is
   that automation's webhook trigger.
-
-- The `fire` limits are 12 an hour and 50 a day for `to-claude` and 6 an hour
-  and 30 a day for `to-grok`, raised from 6 and 20 and from 2 and 6 because
-  the earlier limits would not cover a busy day (owner, 2026-11-28 10:52 UTC).
-  Claude wrote up to 30 handoffs a day in techo that week (2026-11-24).
 
 - `TARGET_GROK_A_INBOX` and `TARGET_GROK_B_INBOX` are Worker secrets holding
   `{"url":"https://api2.cursor.sh/automations/webhook/<id>","key":"crsr_…"}`.
@@ -193,8 +193,10 @@ Each fire is logged with the principal, user agent, source, handoff id and
 outcome, never headers, URL paths, keys or message text.
 
 What an injected Portal client can do with `fire`: wake one of the configured
-receivers up to its limit (at most about 22 % of Grok's weekly limit a day for
-`to-grok`), use up a limit so real wakes get `rate_limited`, or fire a predictable
+receivers up to its limit (about 0.73 % of Grok's weekly limit per `to-grok` wake, so
+about 11 % a day at the daily limit and about 77 % over a week, a limit that every
+Grok bot on the account shares; up to 50 Claude Project sessions a day for
+`to-claude`), use up a limit so real wakes get `rate_limited`, or fire a predictable
 future handoff id first, so the real `fire` gets `already_forwarded` with an early
 `firstAt`. It cannot choose a URL, credential, body or unlisted route. In each case
 the wake is lost or delayed, not misdirected, and the receivers' scheduled checks

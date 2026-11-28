@@ -280,7 +280,7 @@ describe("set_active", () => {
     ]);
     expect(routes[1]).toMatchObject({ active: "claude", setAt: null });
     expect(routes[1]!.targets[0]).toMatchObject({ configured: true, host: "api.anthropic.com" });
-    expect(routes[1]!.fire).toMatchObject({ perHour: 12, perDay: 50 });
+    expect(routes[1]!.fire).toMatchObject(claudeLimit);
     expect(routes[0]!.fire).toBeUndefined();
     const text = JSON.stringify(routes);
     expect(text).not.toContain("synthetic-key");
