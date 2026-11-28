@@ -10,7 +10,7 @@ import { nextLease, notification, signedRequest } from "./helpers.ts";
 const worker = exports.default;
 const relay = () => relayStub(env);
 
-async function activate(target: "grok-a" | "grok-b") {
+async function activate(target: "grok-a-inbox" | "grok-b-inbox") {
   const result = await relay().setActive("fumi", target, nextLease());
   expect(result.ok).toBe(true);
 }
@@ -106,7 +106,7 @@ describe("ingress verification", () => {
 
 describe("forwarding", () => {
   it("forwards the exact body with the active target's bearer key, then deduplicates", async () => {
-    await activate("grok-b");
+    await activate("grok-b-inbox");
     const { calls } = mockTarget(() => new Response("ok", { status: 200 }));
     const body = notification();
     const request = await signedRequest(body, { id: "op_forward-once" });
@@ -127,7 +127,7 @@ describe("forwarding", () => {
   });
 
   it("clears the record on 429, 3xx and 5xx so the next attempt resends", async () => {
-    await activate("grok-a");
+    await activate("grok-a-inbox");
     for (const status of [429, 302, 500, 503]) {
       const responses = [new Response(null, { status }), new Response(null, { status: 202 })];
       const { calls } = mockTarget(() => responses.shift()!);
@@ -140,7 +140,7 @@ describe("forwarding", () => {
   });
 
   it("logs other 4xx as a configuration error and resends later", async () => {
-    await activate("grok-a");
+    await activate("grok-a-inbox");
     const log = vi.spyOn(console, "log");
     const responses = [new Response(null, { status: 401 }), new Response(null, { status: 200 })];
     const { calls } = mockTarget(() => responses.shift()!);
@@ -161,7 +161,7 @@ describe("forwarding", () => {
   });
 
   it("records a timeout as unknown and resends on the next attempt", async () => {
-    await activate("grok-a");
+    await activate("grok-a-inbox");
     let first = true;
     const { calls } = mockTarget(async (request) => {
       if (!first) return new Response(null, { status: 200 });
@@ -177,7 +177,7 @@ describe("forwarding", () => {
   });
 
   it("resends after a network error before any response", async () => {
-    await activate("grok-a");
+    await activate("grok-a-inbox");
     let first = true;
     const { calls } = mockTarget(() => {
       if (first) {
@@ -212,7 +212,7 @@ describe("classifyResponse", () => {
 
 describe("set_active", () => {
   it("refuses unknown routes and targets, bad leases and older leases", async () => {
-    expect(await relay().setActive("other", "grok-a", nextLease())).toEqual({
+    expect(await relay().setActive("other", "grok-a-inbox", nextLease())).toEqual({
       ok: false,
       reason: "unknown_route",
     });
@@ -221,36 +221,41 @@ describe("set_active", () => {
       reason: "unknown_target",
     });
     for (const lease of [0, -1, 1.5, Math.floor(Date.now() / 1000) + 2 * 86_400])
-      expect(await relay().setActive("fumi", "grok-a", lease)).toEqual({
+      expect(await relay().setActive("fumi", "grok-a-inbox", lease)).toEqual({
         ok: false,
         reason: "invalid_lease",
       });
     const lease = nextLease();
-    const set = await relay().setActive("fumi", "grok-b", lease);
-    expect(set).toMatchObject({ ok: true, source: "fumi", active: "grok-b", leaseUnix: lease });
-    expect(await relay().setActive("fumi", "grok-a", lease - 1)).toEqual({
-      ok: false,
-      reason: "stale_lease",
-    });
-    expect(await relay().setActive("fumi", "grok-a", lease)).toEqual({
-      ok: false,
-      reason: "stale_lease",
-    });
-    expect(await relay().setActive("fumi", "grok-b", lease)).toMatchObject({ ok: true });
-    expect(await relay().setActive("fumi", "grok-a", nextLease())).toMatchObject({
+    const set = await relay().setActive("fumi", "grok-b-inbox", lease);
+    expect(set).toMatchObject({
       ok: true,
-      active: "grok-a",
+      source: "fumi",
+      active: "grok-b-inbox",
+      leaseUnix: lease,
+    });
+    expect(await relay().setActive("fumi", "grok-a-inbox", lease - 1)).toEqual({
+      ok: false,
+      reason: "stale_lease",
+    });
+    expect(await relay().setActive("fumi", "grok-a-inbox", lease)).toEqual({
+      ok: false,
+      reason: "stale_lease",
+    });
+    expect(await relay().setActive("fumi", "grok-b-inbox", lease)).toMatchObject({ ok: true });
+    expect(await relay().setActive("fumi", "grok-a-inbox", nextLease())).toMatchObject({
+      ok: true,
+      active: "grok-a-inbox",
     });
   });
 
   it("reports routes without URL paths or keys", async () => {
-    await activate("grok-a");
+    await activate("grok-a-inbox");
     const routes = await relay().getRoutes();
     expect(routes.map((route) => route.source)).toEqual(["fumi", "to-claude", "to-grok"]);
-    expect(routes[0]).toMatchObject({ source: "fumi", mode: "one", active: "grok-a" });
+    expect(routes[0]).toMatchObject({ source: "fumi", mode: "one", active: "grok-a-inbox" });
     expect(routes[0]!.targets.map((t) => [t.name, t.configured, t.host])).toEqual([
-      ["grok-a", true, "grok-a.example.invalid"],
-      ["grok-b", true, "grok-b.example.invalid"],
+      ["grok-a-inbox", true, "grok-a.example.invalid"],
+      ["grok-b-inbox", true, "grok-b.example.invalid"],
     ]);
     expect(routes[1]).toMatchObject({ active: "claude", setAt: null });
     expect(routes[1]!.targets[0]).toMatchObject({ configured: true, host: "api.anthropic.com" });
@@ -266,14 +271,14 @@ describe("set_active", () => {
 describe("review cases", () => {
   it("refuses a lease more than 5 minutes in the future", async () => {
     const now = Math.floor(Date.now() / 1000);
-    expect(await relay().setActive("fumi", "grok-a", now + 301)).toEqual({
+    expect(await relay().setActive("fumi", "grok-a-inbox", now + 301)).toEqual({
       ok: false,
       reason: "invalid_lease",
     });
   });
 
   it("logs a timeout as unknown", async () => {
-    await activate("grok-a");
+    await activate("grok-a-inbox");
     const log = vi.spyOn(console, "log");
     mockTarget(
       (request) =>
@@ -291,7 +296,7 @@ describe("review cases", () => {
   });
 
   it("answers 503 without a second send while the same delivery is in flight", async () => {
-    await activate("grok-a");
+    await activate("grok-a-inbox");
     let released = false;
     // The response is created inside the Relay's own I/O context once released.
     const { calls } = mockTarget(async () => {
@@ -346,11 +351,11 @@ describe("review cases", () => {
   });
 
   it("prunes delivery records older than 7 days", async () => {
-    await activate("grok-a");
+    await activate("grok-a-inbox");
     await runInDurableObject(relay(), async (_instance, state) => {
       state.storage.sql.exec(
         `INSERT INTO deliveries(source, webhook_id, state, target, lock_until, updated_at)
-         VALUES ('fumi', 'op_old', 'forwarded', 'grok-a', 0, ?)`,
+         VALUES ('fumi', 'op_old', 'forwarded', 'grok-a-inbox', 0, ?)`,
         Date.now() - 8 * 24 * 60 * 60 * 1000,
       );
     });
@@ -406,7 +411,7 @@ describe("fire", () => {
       error: "unavailable",
     });
     expect(calls).toHaveLength(0);
-    expect((await relay().setActive("to-grok", "grok-b", nextLease())).ok).toBe(false);
+    expect((await relay().setActive("to-grok", "grok-b-inbox", nextLease())).ok).toBe(false);
     expect((await relay().setActive("to-grok", "grok-b-desk", nextLease())).ok).toBe(true);
     expect(await relay().fire("to-grok", "claude-20261128-001")).toEqual({
       status: "forwarded",

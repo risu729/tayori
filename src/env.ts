@@ -4,8 +4,8 @@ declare global {
   namespace Cloudflare {
     interface Env {
       SOURCE_FUMI_SECRET?: string;
-      TARGET_GROK_A?: string;
-      TARGET_GROK_B?: string;
+      TARGET_GROK_A_INBOX?: string;
+      TARGET_GROK_B_INBOX?: string;
       TARGET_GROK_A_DESK?: string;
       TARGET_GROK_B_DESK?: string;
       TARGET_CLAUDE?: string;

@@ -17,8 +17,8 @@ export const HANDOFF_ID = /^[a-z0-9][a-z0-9-]{0,31}-[0-9]{8}-[0-9]{3,4}$/;
 
 type SecretName =
   | "SOURCE_FUMI_SECRET"
-  | "TARGET_GROK_A"
-  | "TARGET_GROK_B"
+  | "TARGET_GROK_A_INBOX"
+  | "TARGET_GROK_B_INBOX"
   | "TARGET_GROK_A_DESK"
   | "TARGET_GROK_B_DESK"
   | "TARGET_CLAUDE";
@@ -59,15 +59,15 @@ export const SOURCES: Readonly<Record<string, SourceConfig>> = {
   "to-grok": { kind: "mcp", payload: "handoff-id", limit: { perHour: 2, perDay: 6 } },
 };
 export const TARGETS: Readonly<Record<string, TargetConfig>> = {
-  "grok-a": { auth: "bearer", secret: "TARGET_GROK_A" },
-  "grok-b": { auth: "bearer", secret: "TARGET_GROK_B" },
+  "grok-a-inbox": { auth: "bearer", secret: "TARGET_GROK_A_INBOX" },
+  "grok-b-inbox": { auth: "bearer", secret: "TARGET_GROK_B_INBOX" },
   "grok-a-desk": { auth: "bearer", secret: "TARGET_GROK_A_DESK" },
   "grok-b-desk": { auth: "bearer", secret: "TARGET_GROK_B_DESK" },
   claude: { auth: "claude-routine", secret: "TARGET_CLAUDE", timeoutMs: 10_000 },
 };
 /** Each source has exactly one route, named after the source. */
 export const ROUTES: Readonly<Record<string, RouteConfig>> = {
-  fumi: { mode: "one", targets: ["grok-a", "grok-b"] },
+  fumi: { mode: "one", targets: ["grok-a-inbox", "grok-b-inbox"] },
   "to-claude": { mode: "one", targets: ["claude"] },
   "to-grok": { mode: "one", targets: ["grok-a-desk", "grok-b-desk"] },
 };
